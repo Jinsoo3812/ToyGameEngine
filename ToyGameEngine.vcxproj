@@ -147,6 +147,7 @@
     <ClInclude Include="Common\MathHelper.h" />
     <ClInclude Include="Common\UploadBuffer.h" />
     <ClInclude Include="Source\ToyEngineApp.h" />
+    <ClInclude Include="Source\Utility\Log.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

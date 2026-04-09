@@ -120,17 +120,18 @@ bool D3DApp::Initialize()
  
 void D3DApp::CreateRtvAndDsvDescriptorHeaps()
 {
-    D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc;
-    rtvHeapDesc.NumDescriptors = SwapChainBufferCount;
+	// Render Target View의 Heap을 생성합니다.
+    D3D12_DESCRIPTOR_HEAP_DESC rtvHeapDesc; // Descriptor Heap의 서술자
+	rtvHeapDesc.NumDescriptors = SwapChainBufferCount; // 생성할 Descriptor의 개수. RTV는 Front/Back으로 2개
     rtvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_RTV;
     rtvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
 	rtvHeapDesc.NodeMask = 0;
     ThrowIfFailed(md3dDevice->CreateDescriptorHeap(
         &rtvHeapDesc, IID_PPV_ARGS(mRtvHeap.GetAddressOf())));
 
-
-    D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc;
-    dsvHeapDesc.NumDescriptors = 1;
+	// Depth Stencil View의 Heap을 생성합니다.
+	D3D12_DESCRIPTOR_HEAP_DESC dsvHeapDesc; // Descriptor Heap의 서술자
+    dsvHeapDesc.NumDescriptors = 1; // DSV는 하나로 충분
     dsvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_DSV;
     dsvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_NONE;
 	dsvHeapDesc.NodeMask = 0;
@@ -144,34 +145,37 @@ void D3DApp::OnResize()
 	assert(mSwapChain);
     assert(mDirectCmdListAlloc);
 
-	// Flush before changing any resources.
+	// GPU의 남은 명령 처리 대기.
 	FlushCommandQueue();
 
+	// CommandList를 Open하여 새롭게 작성할 수 있도록 초기화.
     ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
 
-	// Release the previous resources we will be recreating.
+	// 창 크기가 바뀌면 Render Target과 Depth Stencil Resource 초기화
 	for (int i = 0; i < SwapChainBufferCount; ++i)
 		mSwapChainBuffer[i].Reset();
     mDepthStencilBuffer.Reset();
 	
-	// Resize the swap chain.
+	// 변경된 창 크기에 맞게 SwapChain 크기 조정.
     ThrowIfFailed(mSwapChain->ResizeBuffers(
 		SwapChainBufferCount, 
 		mClientWidth, mClientHeight, 
 		mBackBufferFormat, 
 		DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH));
 
+	// 현재 보여지는 Buffer Index 초기화
 	mCurrBackBuffer = 0;
  
+	// RTV Heap에 RTV를 저장하기 전 Heap의 시작 위치를 가져온다.
 	CD3DX12_CPU_DESCRIPTOR_HANDLE rtvHeapHandle(mRtvHeap->GetCPUDescriptorHandleForHeapStart());
 	for (UINT i = 0; i < SwapChainBufferCount; i++)
 	{
-		ThrowIfFailed(mSwapChain->GetBuffer(i, IID_PPV_ARGS(&mSwapChainBuffer[i])));
-		md3dDevice->CreateRenderTargetView(mSwapChainBuffer[i].Get(), nullptr, rtvHeapHandle);
-		rtvHeapHandle.Offset(1, mRtvDescriptorSize);
+		ThrowIfFailed(mSwapChain->GetBuffer(i, IID_PPV_ARGS(&mSwapChainBuffer[i]))); // SwapChaine의 i번째 Buffer (SwapChaine 덕에 Buffer를 직접 만들지는 않음)
+		md3dDevice->CreateRenderTargetView(mSwapChainBuffer[i].Get(), nullptr, rtvHeapHandle); // 해당 Buffer에 대한 RTV 생성 및 RTV Heap에 저장
+		rtvHeapHandle.Offset(1, mRtvDescriptorSize); // RTV Heap의 시작 위치를 옮김
 	}
 
-    // Create the depth/stencil buffer and view.
+    // DS Buffer를 생성하기 위한 Description 및 DS Buffer의 Spec 설정
     D3D12_RESOURCE_DESC depthStencilDesc;
     depthStencilDesc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
     depthStencilDesc.Alignment = 0;
@@ -192,18 +196,19 @@ void D3DApp::OnResize()
     depthStencilDesc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
     depthStencilDesc.Flags = D3D12_RESOURCE_FLAG_ALLOW_DEPTH_STENCIL;
 
+	// DS Buffer를 제거할 때의 설정
     D3D12_CLEAR_VALUE optClear;
     optClear.Format = mDepthStencilFormat;
-    optClear.DepthStencil.Depth = 1.0f;
+    optClear.DepthStencil.Depth = 1.0f; // DS Buffer가 제거되면 Depth를 1.0f로 초기화
     optClear.DepthStencil.Stencil = 0;
-	CD3DX12_HEAP_PROPERTIES heapProps(D3D12_HEAP_TYPE_DEFAULT);
+	CD3DX12_HEAP_PROPERTIES heapProps(D3D12_HEAP_TYPE_DEFAULT); // Resource를 GPU의 어느 Heap에 올릴지 결정. Default는 GPU에서만 빠르게 접근 가능
     ThrowIfFailed(md3dDevice->CreateCommittedResource(
-		&heapProps,
+		&heapProps, // Heap Type
 		D3D12_HEAP_FLAG_NONE,
-        &depthStencilDesc,
-		D3D12_RESOURCE_STATE_COMMON,
-        &optClear,
-        IID_PPV_ARGS(mDepthStencilBuffer.GetAddressOf())));
+		&depthStencilDesc, // 생성할 Resource의 Description(설계도)
+		D3D12_RESOURCE_STATE_COMMON, // Resource 초기 상태
+        &optClear, // Resource를 지울 때의 설정
+		IID_PPV_ARGS(mDepthStencilBuffer.GetAddressOf()))); // mDepthStencilBuffer에 Resource를 담는다.
 
     // Create descriptor to mip level 0 of entire resource using the format of the resource.
 	D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc;
@@ -416,7 +421,7 @@ bool D3DApp::InitMainWindow()
 bool D3DApp::InitDirect3D()
 {
 #if defined(DEBUG) || defined(_DEBUG) 
-	// Enable the D3D12 debug layer.
+	// D3D12 Debug Layer를 활성화. 속도가 느려지지만 디버깅 정보를 제공
 {
 	ComPtr<ID3D12Debug> debugController;
 	ThrowIfFailed(D3D12GetDebugInterface(IID_PPV_ARGS(&debugController)));
@@ -426,13 +431,14 @@ bool D3DApp::InitDirect3D()
 
 	ThrowIfFailed(CreateDXGIFactory1(IID_PPV_ARGS(&mdxgiFactory)));
 
-	// Try to create hardware device.
+	/* 1. 장치 생성 */
+	// md3dDevice에 장치 생성
 	HRESULT hardwareResult = D3D12CreateDevice(
-		nullptr,             // default adapter
-		D3D_FEATURE_LEVEL_12_0,
-		IID_PPV_ARGS(&md3dDevice));
+		nullptr,             // 기본 display adapter 사용
+		D3D_FEATURE_LEVEL_12_0, // 최소한 D3D12 지원 GPU 요구
+		IID_PPV_ARGS(&md3dDevice)); // md3dDevice에 저장
 
-	// Fallback to WARP device.
+	// Device 생성 실패 시 WARP로 재시도
 	if(FAILED(hardwareResult))
 	{
 		ComPtr<IDXGIAdapter> pWarpAdapter;
@@ -444,17 +450,18 @@ bool D3DApp::InitDirect3D()
 			IID_PPV_ARGS(&md3dDevice)));
 	}
 
+	/* 2. Fence 생성 및 Descriptor 크기 계산 */
+	// mFence에 Fence 생성
 	ThrowIfFailed(md3dDevice->CreateFence(0, D3D12_FENCE_FLAG_NONE,
 		IID_PPV_ARGS(&mFence)));
 
+	// Device로부터 RTV, DSV, CBV/SRV/UAV Descriptor의 크기를 얻어서 저장.
+	// Descriptor 크기는 Device마다 다르다.
 	mRtvDescriptorSize = md3dDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 	mDsvDescriptorSize = md3dDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_DSV);
 	mCbvSrvUavDescriptorSize = md3dDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
-    // Check 4X MSAA quality support for our back buffer format.
-    // All Direct3D 11 capable devices support 4X MSAA for all render 
-    // target formats, so we only need to check quality support.
-
+	/* 3. 4X MSAA  지원 여부 확인 */
 	D3D12_FEATURE_DATA_MULTISAMPLE_QUALITY_LEVELS msQualityLevels;
 	msQualityLevels.Format = mBackBufferFormat;
 	msQualityLevels.SampleCount = 4;
@@ -465,15 +472,19 @@ bool D3DApp::InitDirect3D()
 		&msQualityLevels,
 		sizeof(msQualityLevels)));
 
+	// 검증 결과가 0보다 크면 4X MSAA를 사용할 수 있다는 뜻입니다.
     m4xMsaaQuality = msQualityLevels.NumQualityLevels;
 	assert(m4xMsaaQuality > 0 && "Unexpected MSAA quality level.");
 	
+	// 현재 사용중인 GPU 로그 출력
 #ifdef _DEBUG
     LogAdapters();
 #endif
-
+	/* 4. Command Queue, CommandListAllocator, CommandList 생성 */
 	CreateCommandObjects();
+	/* 5. SwapChain 생성 */
     CreateSwapChain();
+	/* 6. RTV와 DSV Descriptor Heap 생성 */
     CreateRtvAndDsvDescriptorHeaps();
 
 	return true;
@@ -493,22 +504,25 @@ void D3DApp::CreateCommandObjects()
 	ThrowIfFailed(md3dDevice->CreateCommandList(
 		0,
 		D3D12_COMMAND_LIST_TYPE_DIRECT,
-		mDirectCmdListAlloc.Get(), // Associated command allocator
-		nullptr,                   // Initial PipelineStateObject
+		mDirectCmdListAlloc.Get(), // 연관된 Allocator
+		nullptr,                   // 초기 PSO를 설정하지 않음
 		IID_PPV_ARGS(mCommandList.GetAddressOf())));
 
-	// Start off in a closed state.  This is because the first time we refer 
-	// to the command list we will Reset it, and it needs to be closed before
-	// calling Reset.
+	// CommandList는 Close 상태로 시작한다.
+	// 최초 사용 시 Reset을 호출하는데, 이를 위해서는 Close 상태여야 한다.
 	mCommandList->Close();
 }
 
 void D3DApp::CreateSwapChain()
 {
-    // Release the previous swapchain we will be recreating.
+    // 기존 SwapChaine 해제.
+	// 창 크기 변경 등으로 SwapChaine이 재생성될 때를 대비한다.
     mSwapChain.Reset();
 
+	// Swap Chain 서술자를 통해 SwapChaine 속성 설정
     DXGI_SWAP_CHAIN_DESC sd;
+
+	// BufferDesc: Back Buffer의 속성 설정
     sd.BufferDesc.Width = mClientWidth;
     sd.BufferDesc.Height = mClientHeight;
     sd.BufferDesc.RefreshRate.Numerator = 60;
@@ -516,41 +530,44 @@ void D3DApp::CreateSwapChain()
     sd.BufferDesc.Format = mBackBufferFormat;
     sd.BufferDesc.ScanlineOrdering = DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED;
     sd.BufferDesc.Scaling = DXGI_MODE_SCALING_UNSPECIFIED;
+
+	// SampleDesc: Multisampling 설정
     sd.SampleDesc.Count = m4xMsaaState ? 4 : 1;
     sd.SampleDesc.Quality = m4xMsaaState ? (m4xMsaaQuality - 1) : 0;
-    sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
-    sd.BufferCount = SwapChainBufferCount;
-    sd.OutputWindow = mhMainWnd;
-    sd.Windowed = true;
-	sd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
-    sd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH;
 
-	// Note: Swap chain uses queue to perform flush.
+    sd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT; // BackBuffer는 그리기 용도이므로 Render Target Output으로 설정한다.
+    sd.BufferCount = SwapChainBufferCount; // SwapChain이 사용하는 Buffer 개수
+	sd.OutputWindow = mhMainWnd; // SwapChain이 그릴 창의 핸들
+	sd.Windowed = true; // true: 창 모드, false: 전체 화면 모드
+	sd.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD; // 교체 시 Pointer만 바꿔치고, 이전 내용물은 버림
+    sd.Flags = DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH; // 창 모드와 전체 화면 모드 간의 동작 FLAG
+
+	// DXGI를 통해 SwapChain 생성
     ThrowIfFailed(mdxgiFactory->CreateSwapChain(
-		mCommandQueue.Get(),
-		&sd, 
-		mSwapChain.GetAddressOf()));
+		mCommandQueue.Get(), // BackBuffer의 그리기 명령을 내리기 위해 Queue를 전달받는다.
+		&sd, // SwapChain Descriptor
+		mSwapChain.GetAddressOf())); // mSwapChaine에 저장
 }
 
 void D3DApp::FlushCommandQueue()
 {
-	// Advance the fence value to mark commands up to this fence point.
+	// 다음 Fence 번호 발행
     mCurrentFence++;
 
-    // Add an instruction to the command queue to set a new fence point.  Because we 
-	// are on the GPU timeline, the new fence point won't be set until the GPU finishes
-	// processing all the commands prior to this Signal().
+    // GPU 명령 대기열에 Signal 명령을 새 mCurrentFence로 추가.
+	// GPU는 Signal 명령에 도달하면, Fence값을 mCurrentFence로 갱신.
     ThrowIfFailed(mCommandQueue->Signal(mFence.Get(), mCurrentFence));
 
-	// Wait until the GPU has completed commands up to this fence point.
+	// 현재 Fence 번호를 확인하여 GPU가 어디까지 처리했는지 확인
     if(mFence->GetCompletedValue() < mCurrentFence)
 	{
+		// GPU가 아직 mCurrentFence에 도달하지 못했으므로, Event 생성
 		HANDLE eventHandle = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
 
-        // Fire event when GPU hits current fence.  
+		// GPU는 자신이 mCurrentFence에 도달하면 CPU event에 신호를 전송
         ThrowIfFailed(mFence->SetEventOnCompletion(mCurrentFence, eventHandle));
 
-        // Wait until the GPU hits current fence event is fired.
+        // 해당 event가 올 때까지 CPU는 무한 대기
 		WaitForSingleObject(eventHandle, INFINITE);
         CloseHandle(eventHandle);
 	}

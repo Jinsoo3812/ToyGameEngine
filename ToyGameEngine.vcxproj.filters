@@ -11,6 +11,9 @@
       <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
       <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
     </Filter>
+    <Filter Include="헤더 파일\Utility">
+      <UniqueIdentifier>{e50c5b11-4675-4909-865e-174da47dad59}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Common\Camera.cpp">
@@ -68,6 +71,9 @@
     </ClInclude>
     <ClInclude Include="Source\ToyEngineApp.h">
       <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\Utility\Log.h">
+      <Filter>헤더 파일\Utility</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

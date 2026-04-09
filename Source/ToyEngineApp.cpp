@@ -46,7 +46,7 @@ void ToyEngineApp::Draw(const GameTimer& gt)
 	// CommandAlloc에 Transition 명령을 기록
 	mCommandList->ResourceBarrier(1, &transition);
 
-	// Set the viewport and scissor rect.  This needs to be reset whenever the command list is reset.
+	// NDC 공간을 Viewport와 ScisserRect로 변환
 	mCommandList->RSSetViewports(1, &mScreenViewport);
 	mCommandList->RSSetScissorRects(1, &mScissorRect);
 
