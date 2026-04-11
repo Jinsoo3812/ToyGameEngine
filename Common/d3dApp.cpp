@@ -210,7 +210,7 @@ void D3DApp::OnResize()
         &optClear, // Resource를 지울 때의 설정
 		IID_PPV_ARGS(mDepthStencilBuffer.GetAddressOf()))); // mDepthStencilBuffer에 Resource를 담는다.
 
-    // Create descriptor to mip level 0 of entire resource using the format of the resource.
+	// DS Buffer에 대한 Depth Stencil View를 생성하여 DSV Heap에 저장
 	D3D12_DEPTH_STENCIL_VIEW_DESC dsvDesc;
 	dsvDesc.Flags = D3D12_DSV_FLAG_NONE;
 	dsvDesc.ViewDimension = D3D12_DSV_DIMENSION_TEXTURE2D;
@@ -218,16 +218,16 @@ void D3DApp::OnResize()
 	dsvDesc.Texture2D.MipSlice = 0;
     md3dDevice->CreateDepthStencilView(mDepthStencilBuffer.Get(), &dsvDesc, DepthStencilView());
 
-    // Transition the resource from its initial state to be used as a depth buffer.
+	// DS Buffer를 초기 상태에서 Depth Write 상태로 전환
 	auto transition = CD3DX12_RESOURCE_BARRIER::Transition(mDepthStencilBuffer.Get(), D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_DEPTH_WRITE);
 	mCommandList->ResourceBarrier(1, &transition);
 	
-    // Execute the resize commands.
-    ThrowIfFailed(mCommandList->Close());
+    // Resize 관련 명령
+    ThrowIfFailed(mCommandList->Close()); // Command 제출 전에는 반드시 Close
     ID3D12CommandList* cmdsLists[] = { mCommandList.Get() };
-    mCommandQueue->ExecuteCommandLists(_countof(cmdsLists), cmdsLists);
+    mCommandQueue->ExecuteCommandLists(_countof(cmdsLists), cmdsLists); // CommandQueue에 제출
 
-	// Wait until resize is complete.
+	// Resize 명령들이 모두 처리될 때 까지 CPU 대기
 	FlushCommandQueue();
 
 	// Update the viewport transform to cover the client area.

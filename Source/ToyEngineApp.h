@@ -19,4 +19,3 @@ private:
 	// 매 프레임 호출됩니다. BackBuffer를 그리고 교체하여 화면에 표시합니다.
 	virtual void Draw(const GameTimer& gt)override;
 };
-
