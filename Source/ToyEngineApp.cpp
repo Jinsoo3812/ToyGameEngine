@@ -1,4 +1,4 @@
-#include "ToyEngineApp.h"
+﻿#include "ToyEngineApp.h"
 #include "Utility/Log.h" // 원하는 로그 출력을 도와주는 Utility
 #include <DirectXColors.h>
 
@@ -102,4 +102,20 @@ void ToyEngineApp::Draw(const GameTimer& gt)
 	// done for simplicity.  Later we will show how to organize our rendering code
 	// so we do not have to wait per frame.
 	FlushCommandQueue();
+}
+
+void ToyEngineApp::BuildShadersAndInputLayout()
+{
+	HRESULT hr = S_OK;
+
+	// HLSL을 컴파일 (ByteCode로 변환)
+	mvsByteCode = d3dUtil::CompileShader(L"Shaders\\color.hlsl", nullptr, "VS", "vs_5_0");
+	mpsByteCode = d3dUtil::CompileShader(L"Shaders\\color.hlsl", nullptr, "PS", "ps_5_0");
+
+	// InputLayout의 작성
+	mInputLayout =
+	{
+		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+		{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 }
+	};
 }
