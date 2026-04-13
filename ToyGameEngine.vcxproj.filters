@@ -75,5 +75,11 @@
     <ClInclude Include="Source\Utility\Log.h">
       <Filter>헤더 파일\Utility</Filter>
     </ClInclude>
+    <ClInclude Include="Source\RenderItem.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="ToyGameEngine.rc" />
   </ItemGroup>
 </Project>

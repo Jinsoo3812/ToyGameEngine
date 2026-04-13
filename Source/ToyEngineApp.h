@@ -39,6 +39,6 @@ private:
 	// 일대일 대응이므로, C++ 구조체의 멤버 수만큼 필요하다.
 	std::vector<D3D12_INPUT_ELEMENT_DESC> mInputLayout;
 
-	// Box의 형태를 정의하는 MeshGeometry 객체
+	// Box의 Mesh를 정의하는 MeshGeometry 객체
 	std::unique_ptr<MeshGeometry> mBoxGeo = nullptr;
 };

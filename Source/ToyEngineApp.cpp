@@ -122,6 +122,7 @@ void ToyEngineApp::BuildShadersAndInputLayout()
 
 void ToyEngineApp::BuildBoxGeometry()
 {
+	// Box를 구성하는 정점 배열 정의
 	std::array<Vertex, 8> vertices =
 	{
 		Vertex({ DirectX::XMFLOAT3(-1.0f, -1.0f, -1.0f), DirectX::XMFLOAT4(DirectX::Colors::White) }),
@@ -134,6 +135,7 @@ void ToyEngineApp::BuildBoxGeometry()
 		Vertex({ DirectX::XMFLOAT3(+1.0f, -1.0f, +1.0f), DirectX::XMFLOAT4(DirectX::Colors::Magenta) })
 	};
 
+	// Box를 구성하는 삼각형을 정점의 index로 정의 (시계 방향 나열이 기본)
 	std::array<std::uint16_t, 36> indices =
 	{
 		// front face
@@ -161,29 +163,39 @@ void ToyEngineApp::BuildBoxGeometry()
 		4, 3, 7
 	};
 
+	// GPU로 전송할 정점 버퍼와 인덱스 버퍼의 크기를 계산
 	const UINT vbByteSize = (UINT)vertices.size() * sizeof(Vertex);
 	const UINT ibByteSize = (UINT)indices.size() * sizeof(std::uint16_t);
 
+	// Box의 MeshGeometry 객체 생성
 	mBoxGeo = std::make_unique<MeshGeometry>();
 	mBoxGeo->Name = "boxGeo";
 
+	// 정점 버퍼를 CPU Memory에 백업하기 위한 Blob을 생성하고, vertices 배열의 데이터를 복사
 	ThrowIfFailed(D3DCreateBlob(vbByteSize, &mBoxGeo->VertexBufferCPU));
 	CopyMemory(mBoxGeo->VertexBufferCPU->GetBufferPointer(), vertices.data(), vbByteSize);
 
+	// 인덱스 버퍼를 CPU Memory에 백업하기 위한 Blob을 생성하고, indices 배열의 데이터를 복사
 	ThrowIfFailed(D3DCreateBlob(ibByteSize, &mBoxGeo->IndexBufferCPU));
 	CopyMemory(mBoxGeo->IndexBufferCPU->GetBufferPointer(), indices.data(), ibByteSize);
 
+	// GPU의 Default Heap에 정점 버퍼를 생성 후 vertices 배열을 복사
 	mBoxGeo->VertexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(),
 		mCommandList.Get(), vertices.data(), vbByteSize, mBoxGeo->VertexBufferUploader);
 
+	// GPU의 Default Heap에 인덱스 버퍼를 생성 후 indices 배열을 복사
 	mBoxGeo->IndexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(),
 		mCommandList.Get(), indices.data(), ibByteSize, mBoxGeo->IndexBufferUploader);
 
-	mBoxGeo->VertexByteStride = sizeof(Vertex);
-	mBoxGeo->VertexBufferByteSize = vbByteSize;
-	mBoxGeo->IndexFormat = DXGI_FORMAT_R16_UINT;
-	mBoxGeo->IndexBufferByteSize = ibByteSize;
+	/* Uploader Buffer의 포인터는 데이터 복사가 완료된 후 해제하기 위해 반환받아 보관 */
 
+	// 정점 버퍼와 인덱스 버퍼의 속성을 mBoxGeo에 기록
+	mBoxGeo->VertexByteStride = sizeof(Vertex); // 정점 하나의 Byte 크기
+	mBoxGeo->VertexBufferByteSize = vbByteSize; // 정점 버퍼 전체의 Byte 크기
+	mBoxGeo->IndexFormat = DXGI_FORMAT_R16_UINT; // 인덱스 하나의 Byte 크기
+	mBoxGeo->IndexBufferByteSize = ibByteSize; // 인덱스 버퍼 전체의 Byte 크기
+
+	/* SubMesh는 추후 공부 필요 */
 	SubmeshGeometry submesh;
 	submesh.IndexCount = (UINT)indices.size();
 	submesh.StartIndexLocation = 0;
