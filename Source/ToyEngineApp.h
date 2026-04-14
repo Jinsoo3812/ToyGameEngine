@@ -2,7 +2,15 @@
 
 #include "../Common/d3dApp.h" // Windows 프로그래밍과 닿아있는 DX 초기화 등의 로직
 #include "../Common/MathHelper.h"
+#include "../Common/UploadBuffer.h"
 #include "RenderItem.h" // 정점 구조체 및 RenderItem 구조체를 포함
+
+// Object가 갖는 상수값들을 담는 구조체. (현재는 WVP 행렬만 포함)
+// 위치 이동 필요
+struct ObjectConstants
+{
+	DirectX::XMFLOAT4X4 WorldViewProj = MathHelper::Identity4x4();
+};
 
 class ToyEngineApp : public D3DApp
 {
@@ -29,7 +37,20 @@ private:
 	// Box의 형태를 정의하고 정점 버퍼와 인덱스 버퍼를 생성합니다.
 	void BuildBoxGeometry();
 
+	// 셰이더가 리소스에 참조하기 위해 사용하는 Descriptor Heap을 생성합니다.
+	void BuildDescriptorHeaps();
+
+	void BuildConstantBuffers();
+
 private:
+	// Constant Buffer View를 위한 Descriptor Heap
+	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> mCbvHeap = nullptr;
+
+	std::unique_ptr<UploadBuffer<ObjectConstants>> mObjectCB = nullptr;
+
+	// Box의 Mesh를 정의하는 MeshGeometry 객체
+	std::unique_ptr<MeshGeometry> mBoxGeo = nullptr;
+
 	// 정점 셰이더의 기계어
 	Microsoft::WRL::ComPtr<ID3DBlob> mvsByteCode = nullptr;
 	// 픽셀 셰이더의 기계어
@@ -38,7 +59,4 @@ private:
 	// C++ 구조체의 각 성분과 HLSL 셰이더의 입력 간의 매핑을 정의하는 서술자
 	// 일대일 대응이므로, C++ 구조체의 멤버 수만큼 필요하다.
 	std::vector<D3D12_INPUT_ELEMENT_DESC> mInputLayout;
-
-	// Box의 Mesh를 정의하는 MeshGeometry 객체
-	std::unique_ptr<MeshGeometry> mBoxGeo = nullptr;
 };
