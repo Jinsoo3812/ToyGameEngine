@@ -46,6 +46,8 @@ private:
 	// Constant Buffer View를 위한 Descriptor Heap
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> mCbvHeap = nullptr;
 
+	// ObjectConstants를 담는 실제 버퍼인 UploadBuffer 객체
+	// Constant Buffer의 256byte의 배수 할당 규칙 및 UploadHeap만 사용한다는 특징으로 인해 이러한 래퍼 클래스를 사용한다.
 	std::unique_ptr<UploadBuffer<ObjectConstants>> mObjectCB = nullptr;
 
 	// Box의 Mesh를 정의하는 MeshGeometry 객체

@@ -212,24 +212,31 @@ void ToyEngineApp::BuildDescriptorHeaps()
 	cbvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE; // 셰이더가 Heap을 직접 참조할 수 있도록 상태 지정
 	cbvHeapDesc.NodeMask = 0; // ?
 	ThrowIfFailed(md3dDevice->CreateDescriptorHeap(&cbvHeapDesc,
-		IID_PPV_ARGS(&mCbvHeap))); // Descriptor Heap을 생성하여 mCbvHeap에 저장
+		IID_PPV_ARGS(&mCbvHeap))); // Descriptor Heap을 생성하여 mCbvHeap를 저장
 }
 
 void ToyEngineApp::BuildConstantBuffers()
 {
+	// 상수 버퍼(= UploadBuffer) 객체 할당 및 Upload Heap 할당(UploadBuffer의 기능)
+	// 두 번째 인자는 Buffer에 저장할 요소의 개수 (현재 Box 하나이므로 1)
 	mObjectCB = std::make_unique<UploadBuffer<ObjectConstants>>(md3dDevice.Get(), 1, true);
 
+	// 상수 버퍼에 담을 ObjectConstants의 크기를 계산 (현재는 4x4 행렬 하나이므로 64 Byte)
 	UINT objCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(ObjectConstants));
 
+	// VRAM 상의 가상 주소 가져오기?
 	D3D12_GPU_VIRTUAL_ADDRESS cbAddress = mObjectCB->Resource()->GetGPUVirtualAddress();
-	// Offset to the ith object constant buffer in the buffer.
+
+	// 추후 Box 이외의 Object가 추가되어 wObjectCB가 담을 상수 버퍼가 늘어났을 때를 대비한 offset
 	int boxCBufIndex = 0;
 	cbAddress += boxCBufIndex * objCBByteSize;
 
+	// CBV의 속성을 작성하기 위한 서술자
 	D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc;
 	cbvDesc.BufferLocation = cbAddress;
 	cbvDesc.SizeInBytes = d3dUtil::CalcConstantBufferByteSize(sizeof(ObjectConstants));
 
+	// CBV 생성 및 저장
 	md3dDevice->CreateConstantBufferView(
 		&cbvDesc,
 		mCbvHeap->GetCPUDescriptorHandleForHeapStart());
