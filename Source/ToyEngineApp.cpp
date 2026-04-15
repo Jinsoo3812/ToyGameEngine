@@ -241,3 +241,43 @@ void ToyEngineApp::BuildConstantBuffers()
 		&cbvDesc,
 		mCbvHeap->GetCPUDescriptorHandleForHeapStart());
 }
+
+void ToyEngineApp::BuildRootSignature()
+{
+	// Shader programs typically require resources as input (constant buffers,
+	// textures, samplers).  The root signature defines the resources the shader
+	// programs expect.  If we think of the shader programs as a function, and
+	// the input resources as function parameters, then the root signature can be
+	// thought of as defining the function signature.  
+
+	// Root Parameter Slot의 개수 정의.
+	CD3DX12_ROOT_PARAMETER slotRootParameter[1];
+
+	// Shader에게 View와 Resgister Slot의 연결을 알려주는 table 생성
+	CD3DX12_DESCRIPTOR_RANGE cbvTable;
+	cbvTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0); // cbvTable은 CBV 매핑 하나를 담는 table이며, 그것은 register b0(base register 0)에 연결한다.
+	slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable);
+
+	// Input Assembler 단계에서 InputLayout을 사용할 수 있도록 승인. (왜 여기서 하지 갑자기?)
+	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(1, slotRootParameter, 0, nullptr,
+		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
+
+	// rootSigDesc를 GPU가 읽을 수 있도록 직렬화
+	Microsoft::WRL::ComPtr<ID3DBlob> serializedRootSig = nullptr;
+	Microsoft::WRL::ComPtr<ID3DBlob> errorBlob = nullptr;
+	HRESULT hr = D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
+		serializedRootSig.GetAddressOf(), errorBlob.GetAddressOf());
+
+	if (errorBlob != nullptr)
+	{
+		::OutputDebugStringA((char*)errorBlob->GetBufferPointer());
+	}
+	ThrowIfFailed(hr);
+
+	// VRAM에 Root Signature를 생성하고 mRootSignature에 저장
+	ThrowIfFailed(md3dDevice->CreateRootSignature(
+		0,
+		serializedRootSig->GetBufferPointer(),
+		serializedRootSig->GetBufferSize(),
+		IID_PPV_ARGS(&mRootSignature)));
+}

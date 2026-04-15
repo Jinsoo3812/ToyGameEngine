@@ -37,12 +37,19 @@ private:
 	// Box의 형태를 정의하고 정점 버퍼와 인덱스 버퍼를 생성합니다.
 	void BuildBoxGeometry();
 
-	// 셰이더가 리소스에 참조하기 위해 사용하는 Descriptor Heap을 생성합니다.
+	// View를 종류 별로 저장하는 Descriptor Heap을 생성합니다.
 	void BuildDescriptorHeaps();
 
+	// ConstantBuffer를 UploadBuffer 객체로 생성합니다.
 	void BuildConstantBuffers();
 
+	// RootSignature를 생성합니다.
+	void BuildRootSignature();
+
 private:
+	//
+	Microsoft::WRL::ComPtr<ID3D12RootSignature> mRootSignature = nullptr;
+
 	// Constant Buffer View를 위한 Descriptor Heap
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> mCbvHeap = nullptr;
 
