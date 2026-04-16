@@ -29,6 +29,10 @@ private:
 	// 매 프레임 호출됩니다. BackBuffer를 그리고 교체하여 화면에 표시합니다.
 	virtual void Draw(const GameTimer& gt)override;
 
+	virtual void OnMouseDown(WPARAM btnState, int x, int y)override;
+	virtual void OnMouseUp(WPARAM btnState, int x, int y)override;
+	virtual void OnMouseMove(WPARAM btnState, int x, int y)override;
+
 	// HLSL 셰이더를 로드하고 그 명세서를 정의합니다.
 	// Text로 된 HLSL 파일을 읽어 ByteCode로 컴파일하고 InputLayout을 작성합니다.
 	void BuildShadersAndInputLayout();
@@ -45,6 +49,9 @@ private:
 
 	// RootSignature를 생성합니다.
 	void BuildRootSignature();
+
+	// Pipeline State Object을 생성합니다.
+	void BuildPSO();
 
 private:
 	//
@@ -68,4 +75,17 @@ private:
 	// C++ 구조체의 각 성분과 HLSL 셰이더의 입력 간의 매핑을 정의하는 서술자
 	// 일대일 대응이므로, C++ 구조체의 멤버 수만큼 필요하다.
 	std::vector<D3D12_INPUT_ELEMENT_DESC> mInputLayout;
+
+	// 그래픽 파이프라인의 상태를 제어하는 여러 객체들(셰이더, InputLayout, RootSignature 등)을 묶어서 저장하는 객체
+	Microsoft::WRL::ComPtr<ID3D12PipelineState> mPSO = nullptr;
+
+	DirectX::XMFLOAT4X4 mWorld = MathHelper::Identity4x4();
+	DirectX::XMFLOAT4X4 mView = MathHelper::Identity4x4();
+	DirectX::XMFLOAT4X4 mProj = MathHelper::Identity4x4();
+
+	float mTheta = 1.5f * DirectX::XM_PI;
+	float mPhi = DirectX::XM_PIDIV4;
+	float mRadius = 5.0f;
+
+	POINT mLastMousePos;
 };
