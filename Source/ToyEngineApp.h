@@ -3,14 +3,8 @@
 #include "../Common/d3dApp.h" // Windows 프로그래밍과 닿아있는 DX 초기화 등의 로직
 #include "../Common/MathHelper.h"
 #include "../Common/UploadBuffer.h"
+#include "../Common/StringHelper.h"
 #include "RenderItem.h" // 정점 구조체 및 RenderItem 구조체를 포함
-
-// Object가 갖는 상수값들을 담는 구조체. (현재는 WVP 행렬만 포함)
-// 위치 이동 필요
-struct ObjectConstants
-{
-	DirectX::XMFLOAT4X4 WorldViewProj = MathHelper::Identity4x4();
-};
 
 class ToyEngineApp : public D3DApp
 {
@@ -33,6 +27,9 @@ private:
 	virtual void OnMouseUp(WPARAM btnState, int x, int y)override;
 	virtual void OnMouseMove(WPARAM btnState, int x, int y)override;
 
+	virtual void OnKeyboardDown(WPARAM btnState)override;
+	void OnKeyboardInput(const GameTimer& gt);
+
 	// HLSL 셰이더를 로드하고 그 명세서를 정의합니다.
 	// Text로 된 HLSL 파일을 읽어 ByteCode로 컴파일하고 InputLayout을 작성합니다.
 	void BuildShadersAndInputLayout();
@@ -50,19 +47,32 @@ private:
 	// RootSignature를 생성합니다.
 	void BuildRootSignature();
 
+	// 
+	void BuildRenderItems();
+
+	// 상수 버퍼 값을 갱신합니다.
+	void UpdateObjectCBs(const GameTimer& gt);
+	void UpdateMainPassCB(const GameTimer& gt);
+
+	//
+	void DrawRenderItems(ID3D12GraphicsCommandList* cmdList,
+		const std::vector<RenderItem*>& ritems);
+
 	// Pipeline State Object을 생성합니다.
 	void BuildPSO();
 
 private:
-	//
+	// 셰이더가 사용하는 자원(상수 버퍼 등)과 셰이더의 연결을 정의하는 객체
 	Microsoft::WRL::ComPtr<ID3D12RootSignature> mRootSignature = nullptr;
 
 	// Constant Buffer View를 위한 Descriptor Heap
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> mCbvHeap = nullptr;
 
-	// ObjectConstants를 담는 실제 버퍼인 UploadBuffer 객체
+	// 상수 버퍼를 담게 도와주는 UploadBuffer 객체
 	// Constant Buffer의 256byte의 배수 할당 규칙 및 UploadHeap만 사용한다는 특징으로 인해 이러한 래퍼 클래스를 사용한다.
-	std::unique_ptr<UploadBuffer<ObjectConstants>> mObjectCB = nullptr;
+	std::unique_ptr<UploadBuffer<ObjectConstants>> mObjectCB = nullptr; // Object별 상수 버퍼
+	std::unique_ptr<UploadBuffer<PassConstants>> mPassCB = nullptr; // 전역 상수 버퍼
+	int mObjectCount = 1;
 
 	// Box의 Mesh를 정의하는 MeshGeometry 객체
 	std::unique_ptr<MeshGeometry> mBoxGeo = nullptr;
@@ -77,7 +87,12 @@ private:
 	std::vector<D3D12_INPUT_ELEMENT_DESC> mInputLayout;
 
 	// 그래픽 파이프라인의 상태를 제어하는 여러 객체들(셰이더, InputLayout, RootSignature 등)을 묶어서 저장하는 객체
-	Microsoft::WRL::ComPtr<ID3D12PipelineState> mPSO = nullptr;
+	std::unordered_map<std::string, Microsoft::WRL::ComPtr<ID3D12PipelineState>> mPSOs;
+	bool mIsWireframe = false; // Wireframe 모드 Flag
+
+	std::vector<std::unique_ptr<RenderItem>> mAllRitems;
+	PassConstants mMainPassCB; // What?
+	int mMovingObjIndex = -1;
 
 	DirectX::XMFLOAT4X4 mWorld = MathHelper::Identity4x4();
 	DirectX::XMFLOAT4X4 mView = MathHelper::Identity4x4();
@@ -86,6 +101,9 @@ private:
 	float mTheta = 1.5f * DirectX::XM_PI;
 	float mPhi = DirectX::XM_PIDIV4;
 	float mRadius = 5.0f;
+
+	DirectX::XMFLOAT3 mPos = { 0, 0, 0 };
+	bool mCameraMode = false; // false: adjust camera / true: adjust cube
 
 	POINT mLastMousePos;
 };

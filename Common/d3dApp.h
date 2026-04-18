@@ -58,6 +58,8 @@ protected:
 	virtual void OnMouseUp(WPARAM btnState, int x, int y)  { }
 	virtual void OnMouseMove(WPARAM btnState, int x, int y){ }
 
+	virtual void OnKeyboardDown(WPARAM btnState) {}
+
 protected:
 	bool InitMainWindow(); // EngineApp을 위한 창을 생성합니다.
 	bool InitDirect3D(); // Direct3D를 초기화합니다. (138p 참조)

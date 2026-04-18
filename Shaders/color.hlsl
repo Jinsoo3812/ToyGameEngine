@@ -6,7 +6,13 @@
 
 cbuffer cbPerObject : register(b0)
 {
-	float4x4 gWorldViewProj; 
+    float4x4 gWorld;
+};
+
+cbuffer cbPass: register(b1)
+{
+	float4x4 gView;
+	float4x4 gProj;
 };
 
 // 정점 셰이더의 Input Signature
@@ -29,7 +35,8 @@ VertexOut VS(VertexIn vin)
 	
 	// 입력 받은 3차원 좌표(vin.PosL)을 동차 좌표로 변환
 	// 이후 WVP 행렬과 곱하여 동차 클립 공간에서의 좌표로 변환
-	vout.PosH = mul(float4(vin.PosL, 1.0f), gWorldViewProj);
+    float4x4 WorldViewProj = mul(mul(gWorld, gView), gProj);
+    vout.PosH = mul(float4(vin.PosL, 1.0f), WorldViewProj);
 	
 	// 색상은 그대로 출력
     vout.Color = vin.Color;

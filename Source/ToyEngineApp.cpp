@@ -44,11 +44,12 @@ bool ToyEngineApp::Initialize()
 	// CommandList를 Open하여 명령 입력을 준비
 	ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
 
+	BuildShadersAndInputLayout();
+	BuildBoxGeometry();
+	BuildRenderItems();
 	BuildDescriptorHeaps();
 	BuildConstantBuffers();
 	BuildRootSignature();
-	BuildShadersAndInputLayout();
-	BuildBoxGeometry();
 	BuildPSO();
 
 	// Build.. 함수들에서 작성한 CommandList를 닫은 후 Queue로 넘겨준다.
@@ -87,15 +88,8 @@ void ToyEngineApp::Update(const GameTimer& gt)
 	DirectX::XMMATRIX view = DirectX::XMMatrixLookAtLH(pos, target, up);
 	XMStoreFloat4x4(&mView, view);
 
-	// WVP 행렬 계산
-	DirectX::XMMATRIX world = XMLoadFloat4x4(&mWorld);
-	DirectX::XMMATRIX proj = XMLoadFloat4x4(&mProj);
-	DirectX::XMMATRIX worldViewProj = world * view * proj;
-
-	// WVP 행렬을 Constant Buffer에 복사
-	ObjectConstants objConstants;
-	XMStoreFloat4x4(&objConstants.WorldViewProj, XMMatrixTranspose(worldViewProj));
-	mObjectCB->CopyData(0, objConstants);
+	UpdateObjectCBs(gt);
+	UpdateMainPassCB(gt);
 }
 
 void ToyEngineApp::Draw(const GameTimer& gt)
@@ -105,7 +99,8 @@ void ToyEngineApp::Draw(const GameTimer& gt)
 	ThrowIfFailed(mDirectCmdListAlloc->Reset());
 
 	// CommandList에 Allocator 및 PSO를 할당
-	ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), mPSO.Get()));
+	std::string PSO_type = mIsWireframe ? "opaque_wireframe" : "opaque";
+	ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), mPSOs[PSO_type].Get()));
 
 	// Viewport와 ScissorRect 설정
 	mCommandList->RSSetViewports(1, &mScreenViewport);
@@ -133,20 +128,15 @@ void ToyEngineApp::Draw(const GameTimer& gt)
 	// RootSignature을 셰이더에 바인딩
 	mCommandList->SetGraphicsRootSignature(mRootSignature.Get());
 
-	// IA에 Box의 정점 버퍼와 인덱스 버퍼를 바인딩하고 Primitive Topology을 설정
-	auto vbv = mBoxGeo->VertexBufferView();
-	auto ibv = mBoxGeo->IndexBufferView();
-	mCommandList->IASetVertexBuffers(0, 1, &vbv);
-	mCommandList->IASetIndexBuffer(&ibv);
-	mCommandList->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+	auto cbvHandle = CD3DX12_GPU_DESCRIPTOR_HANDLE(
+		mCbvHeap->GetGPUDescriptorHandleForHeapStart());
+	cbvHandle.Offset(mObjectCount, mCbvSrvUavDescriptorSize);
+	mCommandList->SetGraphicsRootDescriptorTable(1, cbvHandle);
 
-	// RootSignature의 0번 슬롯에 CBV Heap을 바인딩
-	mCommandList->SetGraphicsRootDescriptorTable(0, mCbvHeap->GetGPUDescriptorHandleForHeapStart());
-
-	// 그려!!!
-	mCommandList->DrawIndexedInstanced(
-		mBoxGeo->DrawArgs["box"].IndexCount,
-		1, 0, 0, 0);
+	std::vector<RenderItem*> rItems;
+	for (auto& e : mAllRitems)
+		rItems.push_back(e.get());
+	DrawRenderItems(mCommandList.Get(), rItems);
 
 	// 그리기를 끝냈으니 PRESENT로 상태 전이
 	transition = CD3DX12_RESOURCE_BARRIER::Transition(CurrentBackBuffer(),
@@ -211,6 +201,28 @@ void ToyEngineApp::OnMouseMove(WPARAM btnState, int x, int y)
 
 	mLastMousePos.x = x;
 	mLastMousePos.y = y;
+}
+
+void ToyEngineApp::OnKeyboardDown(WPARAM btnState) {
+	std::stringstream ss;
+	ss << "[OnKeyboardDown]: " << char(btnState) << std::endl;
+	OutputDebugStringA(ss.str().c_str());
+}
+
+void ToyEngineApp::OnKeyboardInput(const GameTimer& gt)
+{
+	const float dt = gt.DeltaTime();
+	float vel = 1.f;
+	if (GetAsyncKeyState('W') & 0x8000)
+		mPos.y += vel * dt;
+	if (GetAsyncKeyState('S') & 0x8000)
+		mPos.y -= vel * dt;
+	if (GetAsyncKeyState('A') & 0x8000)
+		mPos.x -= vel * dt;
+	if (GetAsyncKeyState('D') & 0x8000)
+		mPos.x += vel * dt;
+
+	mIsWireframe = bool(GetAsyncKeyState('1') & 0x8000);
 }
 
 void ToyEngineApp::BuildShadersAndInputLayout()
@@ -316,7 +328,7 @@ void ToyEngineApp::BuildBoxGeometry()
 void ToyEngineApp::BuildDescriptorHeaps()
 {
 	D3D12_DESCRIPTOR_HEAP_DESC cbvHeapDesc; // Descriptor Heap의 속성을 정의하는 서술자
-	cbvHeapDesc.NumDescriptors = 1; // 이 Heap에 저장할 View의 개수 (현재 Box 하나)
+	cbvHeapDesc.NumDescriptors = mObjectCount + 1; // 이 Heap에 저장할 View의 개수 (왜 + 1 ??)
 	cbvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV; // Heap의 타입을 지정
 	cbvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE; // 셰이더가 Heap을 직접 참조할 수 있도록 상태 지정
 	cbvHeapDesc.NodeMask = 0; // ?
@@ -327,28 +339,44 @@ void ToyEngineApp::BuildDescriptorHeaps()
 void ToyEngineApp::BuildConstantBuffers()
 {
 	// 상수 버퍼(= UploadBuffer) 객체 할당 및 Upload Heap 할당(UploadBuffer의 기능)
-	// 두 번째 인자는 Buffer에 저장할 요소의 개수 (현재 Box 하나이므로 1)
-	mObjectCB = std::make_unique<UploadBuffer<ObjectConstants>>(md3dDevice.Get(), 1, true);
+	mObjectCB = std::make_unique<UploadBuffer<ObjectConstants>>(md3dDevice.Get(), mObjectCount, true); // Object의 개수 만큼
+	mPassCB = std::make_unique<UploadBuffer<PassConstants>>(md3dDevice.Get(), 1, true); // 모든 Object가 공유하므로 1
 
 	// 상수 버퍼에 담을 ObjectConstants의 크기를 계산 (현재는 4x4 행렬 하나이므로 64 Byte)
 	UINT objCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(ObjectConstants));
 
-	// VRAM 상의 가상 주소 가져오기?
-	D3D12_GPU_VIRTUAL_ADDRESS cbAddress = mObjectCB->Resource()->GetGPUVirtualAddress();
+	// Object의 수만큼 CBV를 생성
+	for (int i = 0; i < mObjectCount; i++) {
+		// VRAM 상의 가상 주소 가져오기
+		D3D12_GPU_VIRTUAL_ADDRESS cbAddress = mObjectCB->Resource()->GetGPUVirtualAddress();
+		cbAddress += (UINT64)i * objCBByteSize; // i 번째 object가 위치한 offset
 
-	// 추후 Box 이외의 Object가 추가되어 wObjectCB가 담을 상수 버퍼가 늘어났을 때를 대비한 offset
-	int boxCBufIndex = 0;
-	cbAddress += boxCBufIndex * objCBByteSize;
+		// CBV의 속성을 작성하기 위한 서술자
+		D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc;
+		cbvDesc.BufferLocation = cbAddress;
+		cbvDesc.SizeInBytes = objCBByteSize;
+
+		// CBV 생성 및 저장
+		auto handle = CD3DX12_CPU_DESCRIPTOR_HANDLE(mCbvHeap->GetCPUDescriptorHandleForHeapStart());
+		handle.Offset(i, mCbvSrvUavDescriptorSize);
+		md3dDevice->CreateConstantBufferView(
+			&cbvDesc, handle);
+	}
+
+	// Pass 상수 버퍼의 생성
+	D3D12_GPU_VIRTUAL_ADDRESS cbAddress = mPassCB->Resource()->GetGPUVirtualAddress();
+	// Offset to the ith object constant buffer in the buffer.
 
 	// CBV의 속성을 작성하기 위한 서술자
 	D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc;
 	cbvDesc.BufferLocation = cbAddress;
-	cbvDesc.SizeInBytes = d3dUtil::CalcConstantBufferByteSize(sizeof(ObjectConstants));
+	cbvDesc.SizeInBytes = d3dUtil::CalcConstantBufferByteSize(sizeof(PassConstants));
 
-	// CBV 생성 및 저장
+	// Pass CBV 생성 및 저장
+	auto handle = CD3DX12_CPU_DESCRIPTOR_HANDLE(mCbvHeap->GetCPUDescriptorHandleForHeapStart());
+	handle.Offset(mObjectCount, mCbvSrvUavDescriptorSize);
 	md3dDevice->CreateConstantBufferView(
-		&cbvDesc,
-		mCbvHeap->GetCPUDescriptorHandleForHeapStart());
+		&cbvDesc, handle);
 }
 
 void ToyEngineApp::BuildRootSignature()
@@ -359,16 +387,20 @@ void ToyEngineApp::BuildRootSignature()
 	// the input resources as function parameters, then the root signature can be
 	// thought of as defining the function signature.  
 
-	// Root Parameter Slot의 개수 정의.
-	CD3DX12_ROOT_PARAMETER slotRootParameter[1];
-
 	// Shader에게 View와 Resgister Slot의 연결을 알려주는 table 생성
-	CD3DX12_DESCRIPTOR_RANGE cbvTable;
-	cbvTable.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0); // cbvTable은 CBV 매핑 하나를 담는 table이며, 그것은 register b0(base register 0)에 연결한다.
-	slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable);
+	CD3DX12_DESCRIPTOR_RANGE cbvTable0;
+	cbvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);   // b0: per-object World
+	CD3DX12_DESCRIPTOR_RANGE cbvTable1;
+	cbvTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 1);   // b1: per-pass data
 
-	// Input Assembler 단계에서 InputLayout을 사용할 수 있도록 승인. (왜 여기서 하지 갑자기?)
-	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(1, slotRootParameter, 0, nullptr,
+	// Root Parameter Slot의 개수 정의
+	CD3DX12_ROOT_PARAMETER slotRootParameter[2];
+	slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable0);
+	slotRootParameter[1].InitAsDescriptorTable(1, &cbvTable1);
+
+	// Input Assembler 단계에서 InputLayout을 사용할 수 있도록 승인.
+	// 정점/색인 버퍼는 RootSignature가 아닌 Input Slot에 의해 IA 단계에 직접 묶이고, 이곳에서는 그 권한만 승인함
+	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(2, slotRootParameter, 0, nullptr,
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
 	// rootSigDesc를 GPU가 읽을 수 있도록 직렬화
@@ -389,6 +421,92 @@ void ToyEngineApp::BuildRootSignature()
 		serializedRootSig->GetBufferPointer(),
 		serializedRootSig->GetBufferSize(),
 		IID_PPV_ARGS(&mRootSignature)));
+}
+
+void ToyEngineApp::BuildRenderItems()
+{
+	UINT objCBIndex = 0;
+
+	// --- Single box ---
+	auto boxRitem = std::make_unique<RenderItem>();
+	boxRitem->World = MathHelper::Identity4x4();
+	boxRitem->ObjCBIndex = objCBIndex++;
+	//boxRitem->Geo = mGeometries["boxGeo"].get();
+	boxRitem->Geo = mBoxGeo.get();
+	boxRitem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	//boxRitem->IndexCount = boxRitem->Geo->DrawArgs["box"].IndexCount;
+	boxRitem->IndexCount = boxRitem->Geo->DrawArgs["box"].IndexCount;
+	//boxRitem->StartIndexLocation = boxRitem->Geo->DrawArgs["box"].StartIndexLocation;
+	//boxRitem->BaseVertexLocation = boxRitem->Geo->DrawArgs["box"].BaseVertexLocation;
+
+	auto boxRitem2 = std::make_unique<RenderItem>(boxRitem.get());
+	DirectX::XMMATRIX world = DirectX::XMMatrixTranslation(-2.5f, 0.0f, 0.0f);
+	XMStoreFloat4x4(&boxRitem2->World, world);
+	boxRitem2->ObjCBIndex = objCBIndex++;
+	mAllRitems.push_back(std::move(boxRitem2));
+
+	auto boxRitem3 = std::make_unique<RenderItem>(boxRitem.get());
+	world = DirectX::XMMatrixTranslation(+2.5f, 0.0f, 0.0f);
+	XMStoreFloat4x4(&boxRitem3->World, world);
+	boxRitem3->ObjCBIndex = objCBIndex++;
+	mAllRitems.push_back(std::move(boxRitem3));
+
+	mAllRitems.push_back(std::move(boxRitem));
+
+	mMovingObjIndex = mAllRitems.size() - 2;
+	mObjectCount = objCBIndex;
+}
+
+void ToyEngineApp::UpdateObjectCBs(const GameTimer& gt)
+{
+	DirectX::XMMATRIX world = DirectX::XMMatrixTranslation(mPos.x, mPos.y, mPos.z);
+	XMStoreFloat4x4(&(mAllRitems[mMovingObjIndex]->World), world);
+
+	ObjectConstants objConstants;
+	for (size_t i = 0; i < mAllRitems.size(); i++) {
+		world = DirectX::XMLoadFloat4x4(&(mAllRitems[i]->World));
+		std::stringstream ss;
+		ss << "UpdateObjectCBs: world[" << i << "] = " << world << std::endl;
+		OutputDebugStringA(ss.str().c_str());
+		XMStoreFloat4x4(&objConstants.World, XMMatrixTranspose(world));
+		mObjectCB->CopyData(mAllRitems[i]->ObjCBIndex, objConstants);
+	}
+}
+
+void ToyEngineApp::UpdateMainPassCB(const GameTimer& gt)
+{
+	DirectX::XMMATRIX view = XMLoadFloat4x4(&mView);
+	DirectX::XMMATRIX proj = XMLoadFloat4x4(&mProj);
+
+	XMStoreFloat4x4(&mMainPassCB.View, XMMatrixTranspose(view));
+	XMStoreFloat4x4(&mMainPassCB.Proj, XMMatrixTranspose(proj));
+	mPassCB->CopyData(0, mMainPassCB);
+}
+
+void ToyEngineApp::DrawRenderItems(ID3D12GraphicsCommandList* cmdList,
+	const std::vector<RenderItem*>& ritems)
+{
+	for (size_t i = 0; i < ritems.size(); i++)
+	{
+		auto ri = ritems[i];
+
+		auto vbv = ri->Geo->VertexBufferView();
+		auto ibv = ri->Geo->IndexBufferView();
+
+		cmdList->IASetVertexBuffers(0, 1, &vbv);
+		cmdList->IASetIndexBuffer(&ibv);
+		cmdList->IASetPrimitiveTopology(ri->PrimitiveType);
+
+		UINT cbvIndex = ri->ObjCBIndex;
+
+		auto cbvHandle = CD3DX12_GPU_DESCRIPTOR_HANDLE(
+			mCbvHeap->GetGPUDescriptorHandleForHeapStart());
+		cbvHandle.Offset(cbvIndex, mCbvSrvUavDescriptorSize);
+		cmdList->SetGraphicsRootDescriptorTable(0, cbvHandle);
+
+		cmdList->DrawIndexedInstanced(ri->IndexCount,
+			1, 0, 0, 0);
+	}
 }
 
 void ToyEngineApp::BuildPSO()
@@ -422,5 +540,12 @@ void ToyEngineApp::BuildPSO()
 	psoDesc.DSVFormat = mDepthStencilFormat;
 	
 	// PSO 생성 시점에서 각 속성들의 유효성을 미리 검사하므로 Draw 호출 시점에 비용이 발생하지 않음.
-	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(&psoDesc, IID_PPV_ARGS(&mPSO)));
+	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(
+		&psoDesc, IID_PPV_ARGS(&mPSOs["opaque"])));
+
+	// Wireframe variant: always override to wireframe.
+	D3D12_GRAPHICS_PIPELINE_STATE_DESC wireframePsoDesc = psoDesc;
+	wireframePsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
+	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(
+		&wireframePsoDesc, IID_PPV_ARGS(&mPSOs["opaque_wireframe"])));
 }
