@@ -75,6 +75,8 @@ void ToyEngineApp::OnResize()
 
 void ToyEngineApp::Update(const GameTimer& gt)
 {
+	OnKeyboardInput(gt);
+
 	// 카메라의 좌표를 구면좌표계를 통해 계산
 	float x = mRadius * sinf(mPhi) * cosf(mTheta);
 	float z = mRadius * sinf(mPhi) * sinf(mTheta);
@@ -328,7 +330,7 @@ void ToyEngineApp::BuildBoxGeometry()
 void ToyEngineApp::BuildDescriptorHeaps()
 {
 	D3D12_DESCRIPTOR_HEAP_DESC cbvHeapDesc; // Descriptor Heap의 속성을 정의하는 서술자
-	cbvHeapDesc.NumDescriptors = mObjectCount + 1; // 이 Heap에 저장할 View의 개수 (왜 + 1 ??)
+	cbvHeapDesc.NumDescriptors = mObjectCount + 1; // 이 Heap에 저장할 View의 개수 (PassCV를 위해 + 1)
 	cbvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV; // Heap의 타입을 지정
 	cbvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE; // 셰이더가 Heap을 직접 참조할 수 있도록 상태 지정
 	cbvHeapDesc.NodeMask = 0; // ?
@@ -338,11 +340,11 @@ void ToyEngineApp::BuildDescriptorHeaps()
 
 void ToyEngineApp::BuildConstantBuffers()
 {
-	// 상수 버퍼(= UploadBuffer) 객체 할당 및 Upload Heap 할당(UploadBuffer의 기능)
+	// 상수 버퍼(= UploadBuffer) 객체 할당 및 Upload Heap 할당
 	mObjectCB = std::make_unique<UploadBuffer<ObjectConstants>>(md3dDevice.Get(), mObjectCount, true); // Object의 개수 만큼
 	mPassCB = std::make_unique<UploadBuffer<PassConstants>>(md3dDevice.Get(), 1, true); // 모든 Object가 공유하므로 1
 
-	// 상수 버퍼에 담을 ObjectConstants의 크기를 계산 (현재는 4x4 행렬 하나이므로 64 Byte)
+	// 상수 버퍼에 담을 ObjectConstants의 크기를 계산
 	UINT objCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(ObjectConstants));
 
 	// Object의 수만큼 CBV를 생성
@@ -365,7 +367,6 @@ void ToyEngineApp::BuildConstantBuffers()
 
 	// Pass 상수 버퍼의 생성
 	D3D12_GPU_VIRTUAL_ADDRESS cbAddress = mPassCB->Resource()->GetGPUVirtualAddress();
-	// Offset to the ith object constant buffer in the buffer.
 
 	// CBV의 속성을 작성하기 위한 서술자
 	D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc;
@@ -374,7 +375,7 @@ void ToyEngineApp::BuildConstantBuffers()
 
 	// Pass CBV 생성 및 저장
 	auto handle = CD3DX12_CPU_DESCRIPTOR_HANDLE(mCbvHeap->GetCPUDescriptorHandleForHeapStart());
-	handle.Offset(mObjectCount, mCbvSrvUavDescriptorSize);
+	handle.Offset(mObjectCount, mCbvSrvUavDescriptorSize); // ObjectCBV의 다음 index임에 주의할 것
 	md3dDevice->CreateConstantBufferView(
 		&cbvDesc, handle);
 }
@@ -387,13 +388,13 @@ void ToyEngineApp::BuildRootSignature()
 	// the input resources as function parameters, then the root signature can be
 	// thought of as defining the function signature.  
 
-	// Shader에게 View와 Resgister Slot의 연결을 알려주는 table 생성
+	// Shader에게 View와 Resgister Slot의 연결을 알려주는 Descriptor Table 생성
 	CD3DX12_DESCRIPTOR_RANGE cbvTable0;
 	cbvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);   // b0: per-object World
 	CD3DX12_DESCRIPTOR_RANGE cbvTable1;
 	cbvTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 1);   // b1: per-pass data
 
-	// Root Parameter Slot의 개수 정의
+	// Root Parameter Slot과 Descriptor Table 연결
 	CD3DX12_ROOT_PARAMETER slotRootParameter[2];
 	slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable0);
 	slotRootParameter[1].InitAsDescriptorTable(1, &cbvTable1);
@@ -425,9 +426,10 @@ void ToyEngineApp::BuildRootSignature()
 
 void ToyEngineApp::BuildRenderItems()
 {
+	// 상수 버퍼 index
 	UINT objCBIndex = 0;
 
-	// --- Single box ---
+	// Box 하나의 RenderItem 객체를 생성
 	auto boxRitem = std::make_unique<RenderItem>();
 	boxRitem->World = MathHelper::Identity4x4();
 	boxRitem->ObjCBIndex = objCBIndex++;
@@ -439,30 +441,35 @@ void ToyEngineApp::BuildRenderItems()
 	//boxRitem->StartIndexLocation = boxRitem->Geo->DrawArgs["box"].StartIndexLocation;
 	//boxRitem->BaseVertexLocation = boxRitem->Geo->DrawArgs["box"].BaseVertexLocation;
 
+	// 두 번째 Box는 위치만 옮겨서 생성
 	auto boxRitem2 = std::make_unique<RenderItem>(boxRitem.get());
 	DirectX::XMMATRIX world = DirectX::XMMatrixTranslation(-2.5f, 0.0f, 0.0f);
 	XMStoreFloat4x4(&boxRitem2->World, world);
-	boxRitem2->ObjCBIndex = objCBIndex++;
+	boxRitem2->ObjCBIndex = objCBIndex++; // 상수 버퍼 index 변경
 	mAllRitems.push_back(std::move(boxRitem2));
 
+	// 세 번째 Box도 위치만 옮겨서 생성
 	auto boxRitem3 = std::make_unique<RenderItem>(boxRitem.get());
 	world = DirectX::XMMatrixTranslation(+2.5f, 0.0f, 0.0f);
 	XMStoreFloat4x4(&boxRitem3->World, world);
-	boxRitem3->ObjCBIndex = objCBIndex++;
+	boxRitem3->ObjCBIndex = objCBIndex++; // 상수 버퍼 index 변경
 	mAllRitems.push_back(std::move(boxRitem3));
 
 	mAllRitems.push_back(std::move(boxRitem));
 
-	mMovingObjIndex = mAllRitems.size() - 2;
+	mMovingObjIndex = mAllRitems.size() - 1; /*리팩토링 필요. 추후 Object가 늘 때마다 수정해야 함.*/
 	mObjectCount = objCBIndex;
 }
 
 void ToyEngineApp::UpdateObjectCBs(const GameTimer& gt)
 {
+	// Object의 위치 변경에 따른 World 행렬 갱신
 	DirectX::XMMATRIX world = DirectX::XMMatrixTranslation(mPos.x, mPos.y, mPos.z);
 	XMStoreFloat4x4(&(mAllRitems[mMovingObjIndex]->World), world);
 
 	ObjectConstants objConstants;
+
+	// 모든 Render Item을 순회하며 상수 버퍼 업데이트 (최적화 필요)
 	for (size_t i = 0; i < mAllRitems.size(); i++) {
 		world = DirectX::XMLoadFloat4x4(&(mAllRitems[i]->World));
 		std::stringstream ss;
@@ -475,9 +482,11 @@ void ToyEngineApp::UpdateObjectCBs(const GameTimer& gt)
 
 void ToyEngineApp::UpdateMainPassCB(const GameTimer& gt)
 {
+	// 현재 카메라에 대한 View와 Proj 행렬 로드
 	DirectX::XMMATRIX view = XMLoadFloat4x4(&mView);
 	DirectX::XMMATRIX proj = XMLoadFloat4x4(&mProj);
 
+	// 상수 버퍼에 저장
 	XMStoreFloat4x4(&mMainPassCB.View, XMMatrixTranspose(view));
 	XMStoreFloat4x4(&mMainPassCB.Proj, XMMatrixTranspose(proj));
 	mPassCB->CopyData(0, mMainPassCB);
@@ -539,13 +548,13 @@ void ToyEngineApp::BuildPSO()
 	psoDesc.SampleDesc.Quality = m4xMsaaState ? (m4xMsaaQuality - 1) : 0;
 	psoDesc.DSVFormat = mDepthStencilFormat;
 	
-	// PSO 생성 시점에서 각 속성들의 유효성을 미리 검사하므로 Draw 호출 시점에 비용이 발생하지 않음.
+	// 기본 PSO를 opaque로 설정
 	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(
 		&psoDesc, IID_PPV_ARGS(&mPSOs["opaque"])));
 
-	// Wireframe variant: always override to wireframe.
+	// Wireframe PSO는 opaque_wireframe로 설정
 	D3D12_GRAPHICS_PIPELINE_STATE_DESC wireframePsoDesc = psoDesc;
-	wireframePsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
+	wireframePsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME; // 기존 PSO에서 모드만 wireframe으로 변경
 	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(
 		&wireframePsoDesc, IID_PPV_ARGS(&mPSOs["opaque_wireframe"])));
 }
