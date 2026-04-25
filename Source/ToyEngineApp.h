@@ -94,16 +94,21 @@ private:
 	PassConstants mMainPassCB; // What?
 	int mMovingObjIndex = -1;
 
-	DirectX::XMFLOAT4X4 mWorld = MathHelper::Identity4x4();
-	DirectX::XMFLOAT4X4 mView = MathHelper::Identity4x4();
-	DirectX::XMFLOAT4X4 mProj = MathHelper::Identity4x4();
+	
+	DirectX::XMFLOAT4X4 mWorld = MathHelper::Identity4x4(); // Object > World 변환 행렬
+	DirectX::XMFLOAT4X4 mView = MathHelper::Identity4x4(); // World > Camera 변환 행렬
+	DirectX::XMFLOAT4X4 mProj = MathHelper::Identity4x4(); // Camera > Projection 변환 행렬
+	
+	POINT mLastMousePos; // 마우스의 윈도우 창 위에서의 픽셀 좌표
 
-	float mTheta = 1.5f * DirectX::XM_PI;
-	float mPhi = DirectX::XM_PIDIV4;
-	float mRadius = 5.0f;
+	/* Camera Member */
+	float mPitch = 0.0f; // x축을 기준으로 상하 회전
+	float mYaw = 0.0f; // y축을 기준으로 좌우 회전 (반시계방향)
+	float mRadius = 5.0f; // 카메라와 Target 사이의 거리 (카메라의 궤도 반지름)
 
-	DirectX::XMFLOAT3 mPos = { 0, 0, 0 };
+	DirectX::XMFLOAT3 mCameraPos = { 0.0f, 0.0f, -5.0f }; // 카메라의 월드 좌표
+	DirectX::XMFLOAT3 mCameraForward = { 0.0f, 0.0f, 1.0f }; // 카메라의 시선 방향 벡터
+	DirectX::XMFLOAT3 mCameraTarget = { 0.0f, 0.0f, 0.0f }; // 카메라 시선 방향의 어느 한 점
+
 	bool mCameraMode = false; // false: adjust camera / true: adjust cube
-
-	POINT mLastMousePos;
 };

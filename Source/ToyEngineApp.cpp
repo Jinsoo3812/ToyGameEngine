@@ -77,14 +77,9 @@ void ToyEngineApp::Update(const GameTimer& gt)
 {
 	OnKeyboardInput(gt);
 
-	// 카메라의 좌표를 구면좌표계를 통해 계산
-	float x = mRadius * sinf(mPhi) * cosf(mTheta);
-	float z = mRadius * sinf(mPhi) * sinf(mTheta);
-	float y = mRadius * cosf(mPhi);
-
-	DirectX::XMVECTOR pos = DirectX::XMVectorSet(x + mPos.x, y + mPos.y, z + mPos.z, 1.0f); // 카메라의 위치
-	DirectX::XMVECTOR target = DirectX::XMVectorSet(mPos.x, mPos.y, mPos.z, 0.0f); // 카메라 시선방향의 어느 한 점
-	DirectX::XMVECTOR up = DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f); // 카메라의 y 방향
+	DirectX::XMVECTOR pos = DirectX::XMLoadFloat3(&mCameraPos); // 카메라 위치
+	DirectX::XMVECTOR target = DirectX::XMLoadFloat3(&mCameraTarget); // 카메라가 바라보는 지점
+	DirectX::XMVECTOR up = DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f); // 월드 y 방향
 
 	// View 행렬(World > Camera 변환)
 	DirectX::XMMATRIX view = DirectX::XMMatrixLookAtLH(pos, target, up);
@@ -177,42 +172,47 @@ void ToyEngineApp::OnMouseMove(WPARAM btnState, int x, int y)
 {
 	if ((btnState & MK_LBUTTON) != 0)
 	{
+		// 이전 프레임과의 마우스의 픽셀 좌표 차이 * 민감도(0.25f)를  라디안 변환 = 카메라의 각도 변화량
 		float dx = DirectX::XMConvertToRadians(0.25f * static_cast<float>(x - mLastMousePos.x));
 		float dy = DirectX::XMConvertToRadians(0.25f * static_cast<float>(y - mLastMousePos.y));
 
-		// Alt 키(VK_MENU)가 눌려있는지 확인
+		// 카메라의 시선 벡터 회전
+		mYaw += dx;
+		mPitch += dy;
+
+		// 짐벌락 방지 및 고개가 뒤로 넘어가는 것 방지
+		mPitch = MathHelper::Clamp(mPitch, -0.99f * DirectX::XM_PIDIV2, 0.99f * DirectX::XM_PIDIV2);
+
+		// Pitch와 Yaw의 변화량으로 새로운 시선 벡터 계산.
+		float ForwardX = mRadius * cosf(mPitch) * cosf(mYaw);
+		float ForwardY = mRadius * cosf(mPitch);
+		float ForwardZ = mRadius * cosf(mPitch) * sinf(mYaw);
+
+		// Alt 키(VK_MENU)가 눌려있다면 카메라의 시선 방향을 회전(Yaw, Pitch)
 		if (GetAsyncKeyState(VK_MENU) & 0x8000)
 		{
-			// 각도가 변하기 전의 현재 '카메라 절대 위치'를 계산하여 기록
-			float oldX = mRadius * sinf(mPhi) * cosf(mTheta);
-			float oldZ = mRadius * sinf(mPhi) * sinf(mTheta);
-			float oldY = mRadius * cosf(mPhi);
-			DirectX::XMFLOAT3 fixedCamPos = { mPos.x + oldX, mPos.y + oldY, mPos.z + oldZ };
+			// 시선 벡터 갱신
+			mCameraForward = { ForwardX, ForwardY, ForwardZ };
+			
+			DirectX::XMVECTOR vCameraPos = DirectX::XMLoadFloat3(&mCameraPos);
+			DirectX::XMVECTOR vCameraForward = DirectX::XMLoadFloat3(&mCameraForward);
+			DirectX::XMVECTOR vNewTargetPos = DirectX::XMVectorAdd(vCameraPos, vCameraForward);
 
-			// 각도를 업데이트
-			mTheta -= dx;
-			mPhi -= dy;
-
-			// 각도 제한
-			mPhi = MathHelper::Clamp(mPhi, 0.1f, MathHelper::Pi - 0.1f);
-
-			// 갱신된 각도로 새로운 구면 좌표(Offset)를 계산합니다.
-			float newX = mRadius * sinf(mPhi) * cosf(mTheta);
-			float newZ = mRadius * sinf(mPhi) * sinf(mTheta);
-			float newY = mRadius * cosf(mPhi);
-
-			// 카메라 위치가 고정되도록 주시점(mPos)을 역으로 밀어냅니다.
-			mPos.x = fixedCamPos.x - newX;
-			mPos.y = fixedCamPos.y - newY;
-			mPos.z = fixedCamPos.z - newZ;
+			// 시선을 옮긴 후 새로운 타겟 위치 갱신
+			DirectX::XMStoreFloat3(&mCameraTarget, vNewTargetPos);
 		}
-		// Alt 키가 안 눌려있다면 기존의 Orbit 모드로 동작
+		// Alt 키가 안 눌려있다면 Target을 중심으로 한 카메라의 궤도 운동
 		else
 		{
-			mTheta += dx;
-			mPhi += dy;
+			// 새로운 시선 벡터를 뒤집고, 중심을 카메라 타겟으로 변경
+			DirectX::XMFLOAT3 TargetToCamera = { -ForwardX, -ForwardY, -ForwardZ };
+			
+			DirectX::XMVECTOR vCameraTarget = DirectX::XMLoadFloat3(&mCameraTarget);
+			DirectX::XMVECTOR vTargetToCamera = DirectX::XMLoadFloat3(&TargetToCamera);	
+			DirectX::XMVECTOR vNewCameraPos = DirectX::XMVectorAdd(vCameraTarget, vTargetToCamera);
 
-			mPhi = MathHelper::Clamp(mPhi, 0.1f, MathHelper::Pi - 0.1f);
+			// 궤도 운동을 한 카메라의 새 위치 갱신
+			DirectX::XMStoreFloat3(&mCameraPos, vNewCameraPos);
 		}
 	}
 	else if ((btnState & MK_RBUTTON) != 0)
@@ -243,57 +243,57 @@ void ToyEngineApp::OnKeyboardInput(const GameTimer& gt)
 	const float dt = gt.DeltaTime();
 	float vel = 1.f;
 
-	// 1. 카메라의 시선 방향 벡터 (Forward) 계산
-	// 카메라가 mPos(Target)를 향해 바라보고 있으므로, 방향은 구면 좌표계 Offset의 반대 방향입니다.
-	float fx = -sinf(mPhi) * cosf(mTheta);
-	float fy = -cosf(mPhi);
-	float fz = -sinf(mPhi) * sinf(mTheta);
-
-	DirectX::XMVECTOR forward = DirectX::XMVectorSet(fx, fy, fz, 0.0f);
-	forward = DirectX::XMVector3Normalize(forward);
-
-	// 2. 우측 방향 벡터 (Right) 계산
-	// 왼손 좌표계(DirectX)에서 월드의 Up 벡터와 Forward 벡터를 외적(Cross)하면 Right 벡터가 나옵니다.
-	DirectX::XMVECTOR globalUp = DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
-	DirectX::XMVECTOR right = DirectX::XMVector3Cross(globalUp, forward);
-	right = DirectX::XMVector3Normalize(right);
-
-	// 3. 계산된 벡터를 X, Y, Z 성분으로 뽑아내기 위해 FLOAT3로 저장
-	DirectX::XMFLOAT3 fwd, rt;
-	DirectX::XMStoreFloat3(&fwd, forward);
-	DirectX::XMStoreFloat3(&rt, right);
-
-	// 4. 로컬 방향 벡터를 기준으로 이동량 누적
-	if (GetAsyncKeyState('W') & 0x8000)
-	{
-		mPos.x += fwd.x * vel * dt;
-		mPos.y += fwd.y * vel * dt;
-		mPos.z += fwd.z * vel * dt;
-	}
-	if (GetAsyncKeyState('S') & 0x8000)
-	{
-		mPos.x -= fwd.x * vel * dt;
-		mPos.y -= fwd.y * vel * dt;
-		mPos.z -= fwd.z * vel * dt;
-	}
-	if (GetAsyncKeyState('A') & 0x8000)
-	{
-		mPos.x -= rt.x * vel * dt;
-		mPos.y -= rt.y * vel * dt;
-		mPos.z -= rt.z * vel * dt;
-	}
-	if (GetAsyncKeyState('D') & 0x8000)
-	{
-		mPos.x += rt.x * vel * dt;
-		mPos.y += rt.y * vel * dt;
-		mPos.z += rt.z * vel * dt;
-	}
-
-	// Q, E는 카메라 시선과 무관하게 절대 높이(Y축)를 조절하는 엘리베이터 역할로 남겨두는 것이 조작하기 편합니다.
-	if (GetAsyncKeyState('Q') & 0x8000)
-		mPos.y += vel * dt;
-	if (GetAsyncKeyState('E') & 0x8000)
-		mPos.y -= vel * dt;
+	// // 1. 카메라의 시선 방향 벡터 (Forward) 계산
+	// // 카메라가 mPos(Target)를 향해 바라보고 있으므로, 방향은 구면 좌표계 Offset의 반대 방향입니다.
+	// float fx = -sinf(mPhi) * cosf(mTheta);
+	// float fy = -cosf(mPhi);
+	// float fz = -sinf(mPhi) * sinf(mTheta);
+	// 
+	// DirectX::XMVECTOR forward = DirectX::XMVectorSet(fx, fy, fz, 0.0f);
+	// forward = DirectX::XMVector3Normalize(forward);
+	// 
+	// // 2. 우측 방향 벡터 (Right) 계산
+	// // 왼손 좌표계(DirectX)에서 월드의 Up 벡터와 Forward 벡터를 외적(Cross)하면 Right 벡터가 나옵니다.
+	// DirectX::XMVECTOR globalUp = DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+	// DirectX::XMVECTOR right = DirectX::XMVector3Cross(globalUp, forward);
+	// right = DirectX::XMVector3Normalize(right);
+	// 
+	// // 3. 계산된 벡터를 X, Y, Z 성분으로 뽑아내기 위해 FLOAT3로 저장
+	// DirectX::XMFLOAT3 fwd, rt;
+	// DirectX::XMStoreFloat3(&fwd, forward);
+	// DirectX::XMStoreFloat3(&rt, right);
+	// 
+	// // 4. 로컬 방향 벡터를 기준으로 이동량 누적
+	// if (GetAsyncKeyState('W') & 0x8000)
+	// {
+	// 	mPos.x += fwd.x * vel * dt;
+	// 	mPos.y += fwd.y * vel * dt;
+	// 	mPos.z += fwd.z * vel * dt;
+	// }
+	// if (GetAsyncKeyState('S') & 0x8000)
+	// {
+	// 	mPos.x -= fwd.x * vel * dt;
+	// 	mPos.y -= fwd.y * vel * dt;
+	// 	mPos.z -= fwd.z * vel * dt;
+	// }
+	// if (GetAsyncKeyState('A') & 0x8000)
+	// {
+	// 	mPos.x -= rt.x * vel * dt;
+	// 	mPos.y -= rt.y * vel * dt;
+	// 	mPos.z -= rt.z * vel * dt;
+	// }
+	// if (GetAsyncKeyState('D') & 0x8000)
+	// {
+	// 	mPos.x += rt.x * vel * dt;
+	// 	mPos.y += rt.y * vel * dt;
+	// 	mPos.z += rt.z * vel * dt;
+	// }
+	// 
+	// // Q, E는 카메라 시선과 무관하게 절대 높이(Y축)를 조절하는 엘리베이터 역할로 남겨두는 것이 조작하기 편합니다.
+	// if (GetAsyncKeyState('Q') & 0x8000)
+	// 	mPos.y += vel * dt;
+	// if (GetAsyncKeyState('E') & 0x8000)
+	// 	mPos.y -= vel * dt;
 
 	mIsWireframe = bool(GetAsyncKeyState('1') & 0x8000);
 }
