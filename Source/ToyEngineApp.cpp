@@ -173,56 +173,68 @@ void ToyEngineApp::OnMouseMove(WPARAM btnState, int x, int y)
 	if ((btnState & MK_LBUTTON) != 0)
 	{
 		// 이전 프레임과의 마우스의 픽셀 좌표 차이 * 민감도(0.25f)를  라디안 변환 = 카메라의 각도 변화량
-		float dx = DirectX::XMConvertToRadians(0.25f * static_cast<float>(x - mLastMousePos.x));
-		float dy = DirectX::XMConvertToRadians(0.25f * static_cast<float>(y - mLastMousePos.y));
-
-		// 카메라의 시선 벡터 회전
-		mYaw += dx;
-		mPitch += dy;
-
-		// 짐벌락 방지 및 고개가 뒤로 넘어가는 것 방지
-		mPitch = MathHelper::Clamp(mPitch, -0.99f * DirectX::XM_PIDIV2, 0.99f * DirectX::XM_PIDIV2);
-
-		// Pitch와 Yaw의 변화량으로 새로운 시선 벡터 계산.
-		float ForwardX = mRadius * cosf(mPitch) * cosf(mYaw);
-		float ForwardY = mRadius * cosf(mPitch);
-		float ForwardZ = mRadius * cosf(mPitch) * sinf(mYaw);
+		float dx = DirectX::XMConvertToRadians(static_cast<float>(x - mLastMousePos.x));
+		float dy = DirectX::XMConvertToRadians(static_cast<float>(y - mLastMousePos.y));
 
 		// Alt 키(VK_MENU)가 눌려있다면 카메라의 시선 방향을 회전(Yaw, Pitch)
 		if (GetAsyncKeyState(VK_MENU) & 0x8000)
 		{
-			// 시선 벡터 갱신
-			mCameraForward = { ForwardX, ForwardY, ForwardZ };
-			
-			DirectX::XMVECTOR vCameraPos = DirectX::XMLoadFloat3(&mCameraPos);
-			DirectX::XMVECTOR vCameraForward = DirectX::XMLoadFloat3(&mCameraForward);
-			DirectX::XMVECTOR vNewTargetPos = DirectX::XMVectorAdd(vCameraPos, vCameraForward);
+			// 카메라의 시선 벡터 회전
+			mYaw += mMouseRotationSensitivity * dx;
+			mPitch += mMouseRotationSensitivity * dy;
 
-			// 시선을 옮긴 후 새로운 타겟 위치 갱신
-			DirectX::XMStoreFloat3(&mCameraTarget, vNewTargetPos);
+			// 짐벌락 방지 및 고개가 뒤로 넘어가는 것 방지
+			mPitch = MathHelper::Clamp(mPitch, -0.99f * DirectX::XM_PIDIV2, 0.99f * DirectX::XM_PIDIV2);
+
+			// Pitch와 Yaw의 변화량으로 새로운 시선 벡터 계산.
+			float ForwardX = mRadius * cosf(mPitch) * cosf(mYaw);
+			float ForwardY = mRadius * sinf(mPitch);
+			float ForwardZ = mRadius * cosf(mPitch) * sinf(mYaw);
+
+			// 시선벡터를 이용하여 새로운 타겟 위치 계산
+			mCameraTarget.x = mCameraPos.x + ForwardX;
+			mCameraTarget.y = mCameraPos.y + ForwardY;
+			mCameraTarget.z = mCameraPos.z + ForwardZ;
 		}
 		// Alt 키가 안 눌려있다면 Target을 중심으로 한 카메라의 궤도 운동
 		else
 		{
-			// 새로운 시선 벡터를 뒤집고, 중심을 카메라 타겟으로 변경
-			DirectX::XMFLOAT3 TargetToCamera = { -ForwardX, -ForwardY, -ForwardZ };
-			
-			DirectX::XMVECTOR vCameraTarget = DirectX::XMLoadFloat3(&mCameraTarget);
-			DirectX::XMVECTOR vTargetToCamera = DirectX::XMLoadFloat3(&TargetToCamera);	
-			DirectX::XMVECTOR vNewCameraPos = DirectX::XMVectorAdd(vCameraTarget, vTargetToCamera);
+			// 카메라의 시선 벡터 회전 (자연스러운 UX를 위해 반대로)
+			mYaw -= mMouseOrbitalSensitivity * dx;
+			mPitch -= mMouseOrbitalSensitivity * dy;
 
-			// 궤도 운동을 한 카메라의 새 위치 갱신
-			DirectX::XMStoreFloat3(&mCameraPos, vNewCameraPos);
+			// 짐벌락 방지 및 고개가 뒤로 넘어가는 것 방지
+			mPitch = MathHelper::Clamp(mPitch, -0.99f * DirectX::XM_PIDIV2, 0.99f * DirectX::XM_PIDIV2);
+
+			// Pitch와 Yaw의 변화량으로 새로운 시선 벡터 계산.
+			float ForwardX = mRadius * cosf(mPitch) * cosf(mYaw);
+			float ForwardY = mRadius * sinf(mPitch);
+			float ForwardZ = mRadius * cosf(mPitch) * sinf(mYaw);
+
+			// 시선 벡터를 뒤집어 새로운 카메라 위치 계산
+			mCameraPos.x = mCameraTarget.x - ForwardX;
+			mCameraPos.y = mCameraTarget.y - ForwardY;
+			mCameraPos.z = mCameraTarget.z - ForwardZ;
 		}
 	}
 	else if ((btnState & MK_RBUTTON) != 0)
 	{
 		// Make each pixel correspond to 0.005 unit in the scene.
-		float dx = 0.005f * static_cast<float>(x - mLastMousePos.x);
-		float dy = 0.005f * static_cast<float>(y - mLastMousePos.y);
+		float dx = static_cast<float>(x - mLastMousePos.x);
+		float dy = static_cast<float>(y - mLastMousePos.y);
 
 		// Update the camera radius based on input.
-		mRadius += dx - dy;
+		mRadius += (dx - dy) * mMouseZoomSensitivity;
+
+		// 거리가 바뀐 새로운 시선 벡터 계산
+		float ForwardX = mRadius * cosf(mPitch) * cosf(mYaw);
+		float ForwardY = mRadius * sinf(mPitch);
+		float ForwardZ = mRadius * cosf(mPitch) * sinf(mYaw);
+
+		// 시선 벡터를 뒤집어 새로운 카메라 위치 계산
+		mCameraPos.x = mCameraTarget.x - ForwardX;
+		mCameraPos.y = mCameraTarget.y - ForwardY;
+		mCameraPos.z = mCameraTarget.z - ForwardZ;
 
 		// Restrict the radius.
 		mRadius = MathHelper::Clamp(mRadius, 3.0f, 15.0f);

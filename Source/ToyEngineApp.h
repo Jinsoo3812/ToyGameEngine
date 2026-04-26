@@ -103,12 +103,15 @@ private:
 
 	/* Camera Member */
 	float mPitch = 0.0f; // x축을 기준으로 상하 회전
-	float mYaw = 0.0f; // y축을 기준으로 좌우 회전 (반시계방향)
+	float mYaw = DirectX::XM_PIDIV2; // y축을 기준으로 좌우 회전 (반시계방향)
 	float mRadius = 5.0f; // 카메라와 Target 사이의 거리 (카메라의 궤도 반지름)
 
 	DirectX::XMFLOAT3 mCameraPos = { 0.0f, 0.0f, -5.0f }; // 카메라의 월드 좌표
 	DirectX::XMFLOAT3 mCameraForward = { 0.0f, 0.0f, 1.0f }; // 카메라의 시선 방향 벡터
 	DirectX::XMFLOAT3 mCameraTarget = { 0.0f, 0.0f, 0.0f }; // 카메라 시선 방향의 어느 한 점
 
+	float mMouseRotationSensitivity = 0.1f;
+	float mMouseOrbitalSensitivity = 0.25f;
+	float mMouseZoomSensitivity = 0.005f;
 	bool mCameraMode = false; // false: adjust camera / true: adjust cube
 };
