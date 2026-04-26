@@ -6,6 +6,8 @@
 #include "../Common/StringHelper.h"
 #include "RenderItem.h" // 정점 구조체 및 RenderItem 구조체를 포함
 
+using namespace DirectX;
+
 class ToyEngineApp : public D3DApp
 {
 public:
@@ -103,7 +105,7 @@ private:
 
 	/* Camera Member */
 	float mPitch = 0.0f; // x축을 기준으로 상하 회전
-	float mYaw = DirectX::XM_PIDIV2; // y축을 기준으로 좌우 회전 (반시계방향)
+	float mYaw = 0.0f; // y축을 기준으로 좌우 회전 (반시계방향)
 	float mRadius = 5.0f; // 카메라와 Target 사이의 거리 (카메라의 궤도 반지름)
 
 	DirectX::XMFLOAT3 mCameraPos = { 0.0f, 0.0f, -5.0f }; // 카메라의 월드 좌표

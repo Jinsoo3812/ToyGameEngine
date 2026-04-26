@@ -77,13 +77,27 @@ void ToyEngineApp::Update(const GameTimer& gt)
 {
 	OnKeyboardInput(gt);
 
-	mCameraForward.x = mCameraTarget.x - mCameraPos.x;
-	mCameraForward.y = mCameraTarget.y - mCameraPos.y;
-	mCameraForward.z = mCameraTarget.z - mCameraPos.z;
+	// Pitch와 Yaw를 이용해 회전 행렬 및 방향 벡터 도출
+	DirectX::XMMATRIX R = DirectX::XMMatrixRotationRollPitchYaw(mPitch, mYaw, 0.0f);
+	DirectX::XMVECTOR forward = DirectX::XMVector3TransformNormal(DirectX::XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f), R);
+	DirectX::XMVECTOR up = DirectX::XMVector3TransformNormal(DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f), R);
 
-	DirectX::XMVECTOR pos = DirectX::XMLoadFloat3(&mCameraPos); // 카메라 위치
-	DirectX::XMVECTOR target = DirectX::XMLoadFloat3(&mCameraTarget); // 카메라가 바라보는 지점
-	DirectX::XMVECTOR up = DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f); // 월드 y 방향
+	DirectX::XMVECTOR pos = DirectX::XMLoadFloat3(&mCameraPos);
+	DirectX::XMVECTOR target;
+
+	// Alt 키를 누른 상태: 카메라의 회전 (Target을 이동)
+	if (GetAsyncKeyState(VK_MENU) & 0x8000)
+	{
+		target = pos + forward * mRadius;
+		DirectX::XMStoreFloat3(&mCameraTarget, target);
+	}
+	// Alt 키를 누르지 않은 상태: 카메라의 궤도 운동 (Camera 이동)
+	else
+	{
+		target = DirectX::XMLoadFloat3(&mCameraTarget);
+		pos = target - forward * mRadius; // Forward를 뒤집어서 카메라의 위치를 구함
+		DirectX::XMStoreFloat3(&mCameraPos, pos);
+	}
 
 	// View 행렬(World > Camera 변환)
 	DirectX::XMMATRIX view = DirectX::XMMatrixLookAtLH(pos, target, up);
@@ -175,77 +189,31 @@ void ToyEngineApp::OnMouseUp(WPARAM btnState, int x, int y)
 void ToyEngineApp::OnMouseMove(WPARAM btnState, int x, int y)
 {
 	if ((btnState & MK_LBUTTON) != 0)
-	{
-		// 이전 프레임과의 마우스의 픽셀 좌표 차이 * 민감도(0.25f)를  라디안 변환 = 카메라의 각도 변화량
-		float dx = DirectX::XMConvertToRadians(static_cast<float>(x - mLastMousePos.x));
-		float dy = DirectX::XMConvertToRadians(static_cast<float>(y - mLastMousePos.y));
+    {
+        float dx = DirectX::XMConvertToRadians(static_cast<float>(x - mLastMousePos.x));
+        float dy = DirectX::XMConvertToRadians(static_cast<float>(y - mLastMousePos.y));
 
-		// Alt 키(VK_MENU)가 눌려있다면 카메라의 시선 방향을 회전(Yaw, Pitch)
-		if (GetAsyncKeyState(VK_MENU) & 0x8000)
-		{
-			// 카메라의 시선 벡터 회전
-			mYaw += mMouseRotationSensitivity * dx;
-			mPitch += mMouseRotationSensitivity * dy;
+        // Alt 키 여부에 따라 회전 방향(부호)과 민감도 결정
+        bool isAltPressed = (GetAsyncKeyState(VK_MENU) & 0x8000);
+        float sign = isAltPressed ? 1.0f : -1.0f;
+        float sensitivity = isAltPressed ? mMouseRotationSensitivity : mMouseOrbitalSensitivity;
 
-			// 짐벌락 방지 및 고개가 뒤로 넘어가는 것 방지
-			mPitch = MathHelper::Clamp(mPitch, -0.99f * DirectX::XM_PIDIV2, 0.99f * DirectX::XM_PIDIV2);
+        mYaw += sign * sensitivity * dx;
+        mPitch += sign * sensitivity * dy;
 
-			// Pitch와 Yaw의 변화량으로 새로운 시선 벡터 계산.
-			float ForwardX = mRadius * cosf(mPitch) * cosf(mYaw);
-			float ForwardY = mRadius * sinf(mPitch);
-			float ForwardZ = mRadius * cosf(mPitch) * sinf(mYaw);
+        // 짐벌락 방지
+        mPitch = MathHelper::Clamp(mPitch, -0.99f * DirectX::XM_PIDIV2, 0.99f * DirectX::XM_PIDIV2);
+    }
+    else if ((btnState & MK_RBUTTON) != 0)
+    {
+        float dx = static_cast<float>(x - mLastMousePos.x);
+        float dy = static_cast<float>(y - mLastMousePos.y);
+        mRadius += (dx - dy) * mMouseZoomSensitivity;
+        mRadius = MathHelper::Clamp(mRadius, 3.0f, 15.0f);
+    }
 
-			// 시선벡터를 이용하여 새로운 타겟 위치 계산
-			mCameraTarget.x = mCameraPos.x + ForwardX;
-			mCameraTarget.y = mCameraPos.y + ForwardY;
-			mCameraTarget.z = mCameraPos.z + ForwardZ;
-		}
-		// Alt 키가 안 눌려있다면 Target을 중심으로 한 카메라의 궤도 운동
-		else
-		{
-			// 카메라의 시선 벡터 회전 (자연스러운 UX를 위해 반대로)
-			mYaw -= mMouseOrbitalSensitivity * dx;
-			mPitch -= mMouseOrbitalSensitivity * dy;
-
-			// 짐벌락 방지 및 고개가 뒤로 넘어가는 것 방지
-			mPitch = MathHelper::Clamp(mPitch, -0.99f * DirectX::XM_PIDIV2, 0.99f * DirectX::XM_PIDIV2);
-
-			// Pitch와 Yaw의 변화량으로 새로운 시선 벡터 계산.
-			float ForwardX = mRadius * cosf(mPitch) * cosf(mYaw);
-			float ForwardY = mRadius * sinf(mPitch);
-			float ForwardZ = mRadius * cosf(mPitch) * sinf(mYaw);
-
-			// 시선 벡터를 뒤집어 새로운 카메라 위치 계산
-			mCameraPos.x = mCameraTarget.x - ForwardX;
-			mCameraPos.y = mCameraTarget.y - ForwardY;
-			mCameraPos.z = mCameraTarget.z - ForwardZ;
-		}
-	}
-	else if ((btnState & MK_RBUTTON) != 0)
-	{
-		// Make each pixel correspond to 0.005 unit in the scene.
-		float dx = static_cast<float>(x - mLastMousePos.x);
-		float dy = static_cast<float>(y - mLastMousePos.y);
-
-		// Update the camera radius based on input.
-		mRadius += (dx - dy) * mMouseZoomSensitivity;
-
-		// 거리가 바뀐 새로운 시선 벡터 계산
-		float ForwardX = mRadius * cosf(mPitch) * cosf(mYaw);
-		float ForwardY = mRadius * sinf(mPitch);
-		float ForwardZ = mRadius * cosf(mPitch) * sinf(mYaw);
-
-		// 시선 벡터를 뒤집어 새로운 카메라 위치 계산
-		mCameraPos.x = mCameraTarget.x - ForwardX;
-		mCameraPos.y = mCameraTarget.y - ForwardY;
-		mCameraPos.z = mCameraTarget.z - ForwardZ;
-
-		// Restrict the radius.
-		mRadius = MathHelper::Clamp(mRadius, 3.0f, 15.0f);
-	}
-
-	mLastMousePos.x = x;
-	mLastMousePos.y = y;
+    mLastMousePos.x = x;
+    mLastMousePos.y = y;
 }
 
 void ToyEngineApp::OnKeyboardDown(WPARAM btnState) {
@@ -257,61 +225,39 @@ void ToyEngineApp::OnKeyboardDown(WPARAM btnState) {
 void ToyEngineApp::OnKeyboardInput(const GameTimer& gt)
 {
 	const float dt = gt.DeltaTime();
-	
-	// Camera Z 단위 벡터
-	DirectX::XMVECTOR forward = DirectX::XMVector3Normalize(DirectX::XMLoadFloat3(&mCameraForward));
-	
-	// Camera X 단위 벡터
-	DirectX::XMVECTOR globalUp = DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
-	DirectX::XMVECTOR right = DirectX::XMVector3Normalize(DirectX::XMVector3Cross(globalUp, forward));
-	
-	// Camera Y는 구하지 않음. 카메라가 고개를 들고 있다고 해도 윗 방향키는 월드에 수직으로 올라가는 것이 자연스러우니까.
 
-	DirectX::XMFLOAT3 fwd, rt;
-	DirectX::XMStoreFloat3(&fwd, forward);
-	DirectX::XMStoreFloat3(&rt, right);
-	
-	float dx = 0.0f;
-	float dy = 0.0f;
-	float dz = 0.0f;
+	// Yaw, Pitch를 이용해 회전행렬 R 도출 (Roll을 이용한 Z축 회전은 생략)
+	DirectX::XMMATRIX R = DirectX::XMMatrixRotationRollPitchYaw(mPitch, mYaw, 0.0f);
 
-	// 로컬 방향 벡터를 기준으로 이동량 누적
-	if (GetAsyncKeyState('W') & 0x8000)
-	{
-		dx += fwd.x * mCameraMoveSpeed * dt;
-		dy += fwd.y * mCameraMoveSpeed * dt;
-		dz += fwd.z * mCameraMoveSpeed * dt;
-	}
-	if (GetAsyncKeyState('S') & 0x8000)
-	{
-		dx -= fwd.x * mCameraMoveSpeed * dt;
-		dy -= fwd.y * mCameraMoveSpeed * dt;
-		dz -= fwd.z * mCameraMoveSpeed * dt;
-	}
-	if (GetAsyncKeyState('A') & 0x8000)
-	{
-		dx -= rt.x * mCameraMoveSpeed * dt;
-		dy -= rt.y * mCameraMoveSpeed * dt;
-		dz -= rt.z * mCameraMoveSpeed * dt;
-	}
-	if (GetAsyncKeyState('D') & 0x8000)
-	{
-		dx += rt.x * mCameraMoveSpeed * dt;
-		dy += rt.y * mCameraMoveSpeed * dt;
-		dz += rt.z * mCameraMoveSpeed * dt;
-	}
-	if (GetAsyncKeyState('Q') & 0x8000)
-		dy += mCameraMoveSpeed * dt;
-	if (GetAsyncKeyState('E') & 0x8000)
-		dy -= mCameraMoveSpeed * dt;
+	// Camera 로컬 방향 벡터 도출 (World 방향 벡터에 R을 적용한 후 정규화)
+	DirectX::XMVECTOR forward = DirectX::XMVector3TransformNormal(DirectX::XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f), R);
+	DirectX::XMVECTOR right = DirectX::XMVector3TransformNormal(DirectX::XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f), R);
+	DirectX::XMVECTOR up = DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
 
-	mCameraPos.x += dx;
-	mCameraPos.y += dy;
-	mCameraPos.z += dz;
+	DirectX::XMVECTOR movement = DirectX::XMVectorZero();
 
-	mCameraTarget.x += dx;
-	mCameraTarget.y += dy;
-	mCameraTarget.z += dz;
+	if (GetAsyncKeyState('W') & 0x8000) movement += forward;
+	if (GetAsyncKeyState('S') & 0x8000) movement -= forward;
+	if (GetAsyncKeyState('D') & 0x8000) movement += right;
+	if (GetAsyncKeyState('A') & 0x8000) movement -= right;
+	if (GetAsyncKeyState('Q') & 0x8000) movement += up;
+	if (GetAsyncKeyState('E') & 0x8000) movement -= up;
+
+	// 이동이 있을 경우에만 위치 갱신 처리
+	if (!DirectX::XMVector3Equal(movement, DirectX::XMVectorZero()))
+	{
+		movement = DirectX::XMVector3Normalize(movement) * mCameraMoveSpeed * dt;
+
+		// 이동 시 카메라 위치와 Target 위치가 동시에 이동해야 함
+		DirectX::XMVECTOR pos = DirectX::XMLoadFloat3(&mCameraPos);
+		DirectX::XMVECTOR target = DirectX::XMLoadFloat3(&mCameraTarget);
+
+		pos += movement;
+		target += movement;
+
+		DirectX::XMStoreFloat3(&mCameraPos, pos);
+		DirectX::XMStoreFloat3(&mCameraTarget, target);
+	}
 
 	mIsWireframe = bool(GetAsyncKeyState('1') & 0x8000);
 }
