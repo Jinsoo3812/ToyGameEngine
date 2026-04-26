@@ -77,6 +77,10 @@ void ToyEngineApp::Update(const GameTimer& gt)
 {
 	OnKeyboardInput(gt);
 
+	mCameraForward.x = mCameraTarget.x - mCameraPos.x;
+	mCameraForward.y = mCameraTarget.y - mCameraPos.y;
+	mCameraForward.z = mCameraTarget.z - mCameraPos.z;
+
 	DirectX::XMVECTOR pos = DirectX::XMLoadFloat3(&mCameraPos); // 카메라 위치
 	DirectX::XMVECTOR target = DirectX::XMLoadFloat3(&mCameraTarget); // 카메라가 바라보는 지점
 	DirectX::XMVECTOR up = DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f); // 월드 y 방향
@@ -253,59 +257,61 @@ void ToyEngineApp::OnKeyboardDown(WPARAM btnState) {
 void ToyEngineApp::OnKeyboardInput(const GameTimer& gt)
 {
 	const float dt = gt.DeltaTime();
-	float vel = 1.f;
+	
+	// Camera Z 단위 벡터
+	DirectX::XMVECTOR forward = DirectX::XMVector3Normalize(DirectX::XMLoadFloat3(&mCameraForward));
+	
+	// Camera X 단위 벡터
+	DirectX::XMVECTOR globalUp = DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
+	DirectX::XMVECTOR right = DirectX::XMVector3Normalize(DirectX::XMVector3Cross(globalUp, forward));
+	
+	// Camera Y는 구하지 않음. 카메라가 고개를 들고 있다고 해도 윗 방향키는 월드에 수직으로 올라가는 것이 자연스러우니까.
 
-	// // 1. 카메라의 시선 방향 벡터 (Forward) 계산
-	// // 카메라가 mPos(Target)를 향해 바라보고 있으므로, 방향은 구면 좌표계 Offset의 반대 방향입니다.
-	// float fx = -sinf(mPhi) * cosf(mTheta);
-	// float fy = -cosf(mPhi);
-	// float fz = -sinf(mPhi) * sinf(mTheta);
-	// 
-	// DirectX::XMVECTOR forward = DirectX::XMVectorSet(fx, fy, fz, 0.0f);
-	// forward = DirectX::XMVector3Normalize(forward);
-	// 
-	// // 2. 우측 방향 벡터 (Right) 계산
-	// // 왼손 좌표계(DirectX)에서 월드의 Up 벡터와 Forward 벡터를 외적(Cross)하면 Right 벡터가 나옵니다.
-	// DirectX::XMVECTOR globalUp = DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f);
-	// DirectX::XMVECTOR right = DirectX::XMVector3Cross(globalUp, forward);
-	// right = DirectX::XMVector3Normalize(right);
-	// 
-	// // 3. 계산된 벡터를 X, Y, Z 성분으로 뽑아내기 위해 FLOAT3로 저장
-	// DirectX::XMFLOAT3 fwd, rt;
-	// DirectX::XMStoreFloat3(&fwd, forward);
-	// DirectX::XMStoreFloat3(&rt, right);
-	// 
-	// // 4. 로컬 방향 벡터를 기준으로 이동량 누적
-	// if (GetAsyncKeyState('W') & 0x8000)
-	// {
-	// 	mPos.x += fwd.x * vel * dt;
-	// 	mPos.y += fwd.y * vel * dt;
-	// 	mPos.z += fwd.z * vel * dt;
-	// }
-	// if (GetAsyncKeyState('S') & 0x8000)
-	// {
-	// 	mPos.x -= fwd.x * vel * dt;
-	// 	mPos.y -= fwd.y * vel * dt;
-	// 	mPos.z -= fwd.z * vel * dt;
-	// }
-	// if (GetAsyncKeyState('A') & 0x8000)
-	// {
-	// 	mPos.x -= rt.x * vel * dt;
-	// 	mPos.y -= rt.y * vel * dt;
-	// 	mPos.z -= rt.z * vel * dt;
-	// }
-	// if (GetAsyncKeyState('D') & 0x8000)
-	// {
-	// 	mPos.x += rt.x * vel * dt;
-	// 	mPos.y += rt.y * vel * dt;
-	// 	mPos.z += rt.z * vel * dt;
-	// }
-	// 
-	// // Q, E는 카메라 시선과 무관하게 절대 높이(Y축)를 조절하는 엘리베이터 역할로 남겨두는 것이 조작하기 편합니다.
-	// if (GetAsyncKeyState('Q') & 0x8000)
-	// 	mPos.y += vel * dt;
-	// if (GetAsyncKeyState('E') & 0x8000)
-	// 	mPos.y -= vel * dt;
+	DirectX::XMFLOAT3 fwd, rt;
+	DirectX::XMStoreFloat3(&fwd, forward);
+	DirectX::XMStoreFloat3(&rt, right);
+	
+	float dx = 0.0f;
+	float dy = 0.0f;
+	float dz = 0.0f;
+
+	// 로컬 방향 벡터를 기준으로 이동량 누적
+	if (GetAsyncKeyState('W') & 0x8000)
+	{
+		dx += fwd.x * mCameraMoveSpeed * dt;
+		dy += fwd.y * mCameraMoveSpeed * dt;
+		dz += fwd.z * mCameraMoveSpeed * dt;
+	}
+	if (GetAsyncKeyState('S') & 0x8000)
+	{
+		dx -= fwd.x * mCameraMoveSpeed * dt;
+		dy -= fwd.y * mCameraMoveSpeed * dt;
+		dz -= fwd.z * mCameraMoveSpeed * dt;
+	}
+	if (GetAsyncKeyState('A') & 0x8000)
+	{
+		dx -= rt.x * mCameraMoveSpeed * dt;
+		dy -= rt.y * mCameraMoveSpeed * dt;
+		dz -= rt.z * mCameraMoveSpeed * dt;
+	}
+	if (GetAsyncKeyState('D') & 0x8000)
+	{
+		dx += rt.x * mCameraMoveSpeed * dt;
+		dy += rt.y * mCameraMoveSpeed * dt;
+		dz += rt.z * mCameraMoveSpeed * dt;
+	}
+	if (GetAsyncKeyState('Q') & 0x8000)
+		dy += mCameraMoveSpeed * dt;
+	if (GetAsyncKeyState('E') & 0x8000)
+		dy -= mCameraMoveSpeed * dt;
+
+	mCameraPos.x += dx;
+	mCameraPos.y += dy;
+	mCameraPos.z += dz;
+
+	mCameraTarget.x += dx;
+	mCameraTarget.y += dy;
+	mCameraTarget.z += dz;
 
 	mIsWireframe = bool(GetAsyncKeyState('1') & 0x8000);
 }

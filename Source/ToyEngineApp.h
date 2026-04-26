@@ -113,5 +113,6 @@ private:
 	float mMouseRotationSensitivity = 0.1f;
 	float mMouseOrbitalSensitivity = 0.25f;
 	float mMouseZoomSensitivity = 0.005f;
+	float mCameraMoveSpeed = 3.0f;
 	bool mCameraMode = false; // false: adjust camera / true: adjust cube
 };
