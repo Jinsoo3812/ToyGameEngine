@@ -5,8 +5,12 @@
 #include "../Common/UploadBuffer.h"
 #include "../Common/StringHelper.h"
 #include "RenderItem.h" // 정점 구조체 및 RenderItem 구조체를 포함
+#include "FrameResource.h" // TO DO: 
 
 using namespace DirectX;
+
+// FrameResource의 개수
+const int gNumFrameResources = 3; // CPU는 GPU보다 N frame을 앞서서 작업할 수 있다.
 
 class ToyEngineApp : public D3DApp
 {
@@ -25,12 +29,12 @@ private:
 	// 매 프레임 호출됩니다. BackBuffer를 그리고 교체하여 화면에 표시합니다.
 	virtual void Draw(const GameTimer& gt)override;
 
-	virtual void OnMouseDown(WPARAM btnState, int x, int y)override;
-	virtual void OnMouseUp(WPARAM btnState, int x, int y)override;
-	virtual void OnMouseMove(WPARAM btnState, int x, int y)override;
+	virtual void OnMouseDown(WPARAM btnState, int x, int y)override; // 마우스가 프로그램 창 위에서 눌렸을 때 호출
+	virtual void OnMouseUp(WPARAM btnState, int x, int y)override; // 마우스가 프로그램 창 위에서 떼졌을 때 호출
+	virtual void OnMouseMove(WPARAM btnState, int x, int y)override; // 마우스가 프로그램 창 위에서 움직였을 때 호출.
 
-	virtual void OnKeyboardDown(WPARAM btnState)override;
-	void OnKeyboardInput(const GameTimer& gt);
+	virtual void OnKeyboardDown(WPARAM btnState)override; // 키보드가 처음 눌릴 때 한 번 호출됩니다.
+	void OnKeyboardInput(const GameTimer& gt); // 키보드의 상태를 매 프레임마다 체크하여 처리합니다.
 
 	// HLSL 셰이더를 로드하고 그 명세서를 정의합니다.
 	// Text로 된 HLSL 파일을 읽어 ByteCode로 컴파일하고 InputLayout을 작성합니다.
@@ -49,19 +53,22 @@ private:
 	// RootSignature를 생성합니다.
 	void BuildRootSignature();
 
-	// 
+	// RenderItem을 생성 및 저장
 	void BuildRenderItems();
 
 	// 상수 버퍼 값을 갱신합니다.
 	void UpdateObjectCBs(const GameTimer& gt);
 	void UpdateMainPassCB(const GameTimer& gt);
 
-	//
+	// RenderItem을 순회하며 Drawcall 호출
 	void DrawRenderItems(ID3D12GraphicsCommandList* cmdList,
 		const std::vector<RenderItem*>& ritems);
 
 	// Pipeline State Object을 생성합니다.
 	void BuildPSO();
+
+	// FrameResource를 생성합니다.
+	void BuildFrameResources();
 
 private:
 	// 셰이더가 사용하는 자원(상수 버퍼 등)과 셰이더의 연결을 정의하는 객체
@@ -116,5 +123,9 @@ private:
 	float mMouseOrbitalSensitivity = 0.25f;
 	float mMouseZoomSensitivity = 0.005f;
 	float mCameraMoveSpeed = 3.0f;
-	bool mCameraMode = false; // false: adjust camera / true: adjust cube
+
+	/* Frame Resource */
+	std::vector<std::unique_ptr<FrameResource>> mFrameResources; // FrameResources Container
+	FrameResource* mCurrFrameResource = nullptr; // 현재 CPU가 작업 중인 FrameResource
+	int mCurrFrameResourceIndex = 0; // CPU가 작업 중인 FrameResource의 index
 };

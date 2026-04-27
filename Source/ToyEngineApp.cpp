@@ -103,19 +103,32 @@ void ToyEngineApp::Update(const GameTimer& gt)
 	DirectX::XMMATRIX view = DirectX::XMMatrixLookAtLH(pos, target, up);
 	XMStoreFloat4x4(&mView, view);
 
+	// FrameResources 배열에 순환 접근
+	mCurrFrameResourceIndex = (mCurrFrameResourceIndex + 1) % gNumFrameResources;
+	mCurrFrameResource = mFrameResources[mCurrFrameResourceIndex].get();
+
+	// GPU가 현재 frame의 자원을 다 처리했는지 확인 및 대기 (N frame 전에 세워둔 fence)
+	if (mCurrFrameResource->Fence != 0 && mFence->GetCompletedValue() < mCurrFrameResource->Fence)
+	{
+		HANDLE eventHandle = CreateEventEx(nullptr, nullptr, 0, EVENT_ALL_ACCESS);
+		ThrowIfFailed(mFence->SetEventOnCompletion(mCurrFrameResource->Fence, eventHandle));
+		WaitForSingleObject(eventHandle, INFINITE);
+		CloseHandle(eventHandle);
+	}
+
 	UpdateObjectCBs(gt);
 	UpdateMainPassCB(gt);
 }
 
 void ToyEngineApp::Draw(const GameTimer& gt)
 {
-	// 이번 프레임의 Command를 기록하기 전에 CommandAllocator를 초기화
-	// Draw의 끝에 있는 FlushCommandQueue가 CommandQueue를 비우기 때문에 안전하게 Allocator를 초기화할 수 있다.
-	ThrowIfFailed(mDirectCmdListAlloc->Reset());
+	// 이번 frame에 사용할 command allocator를 가져와 Reset하여 재사용할 준비
+	auto cmdListAlloc = mCurrFrameResource->CmdListAlloc;
+	ThrowIfFailed(cmdListAlloc->Reset());
 
 	// CommandList에 Allocator 및 PSO를 할당
 	std::string PSO_type = mIsWireframe ? "opaque_wireframe" : "opaque";
-	ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), mPSOs[PSO_type].Get()));
+	ThrowIfFailed(mCommandList->Reset(cmdListAlloc.Get(), mPSOs[PSO_type].Get()));
 
 	// Viewport와 ScissorRect 설정
 	mCommandList->RSSetViewports(1, &mScreenViewport);
@@ -169,8 +182,11 @@ void ToyEngineApp::Draw(const GameTimer& gt)
 	ThrowIfFailed(mSwapChain->Present(0, 0));
 	mCurrBackBuffer = (mCurrBackBuffer + 1) % SwapChainBufferCount;
 
-	// 현재까지의 작업이 모두 끝날 때 까지 CPU 대기
-	FlushCommandQueue();
+	// 다음 fence를 세우기 위해 fence + 1
+	mCurrFrameResource->Fence = ++mCurrentFence;
+
+	// 새로운 fence 설치
+	mCommandQueue->Signal(mFence.Get(), mCurrentFence);
 }
 
 void ToyEngineApp::OnMouseDown(WPARAM btnState, int x, int y)
@@ -533,24 +549,32 @@ void ToyEngineApp::UpdateMainPassCB(const GameTimer& gt)
 void ToyEngineApp::DrawRenderItems(ID3D12GraphicsCommandList* cmdList,
 	const std::vector<RenderItem*>& ritems)
 {
+	// RenderItem을 순회하며 그리기
 	for (size_t i = 0; i < ritems.size(); i++)
 	{
 		auto ri = ritems[i];
 
+		// VB, IB의 View
 		auto vbv = ri->Geo->VertexBufferView();
 		auto ibv = ri->Geo->IndexBufferView();
 
+		// IA에 VB와 IB 바인드 및 기본도형 지정
 		cmdList->IASetVertexBuffers(0, 1, &vbv);
 		cmdList->IASetIndexBuffer(&ibv);
 		cmdList->IASetPrimitiveTopology(ri->PrimitiveType);
 
+		// 이번 RenderItem의 CB index
 		UINT cbvIndex = ri->ObjCBIndex;
 
+		// Descriptor heap에서 CBV 획득
 		auto cbvHandle = CD3DX12_GPU_DESCRIPTOR_HANDLE(
 			mCbvHeap->GetGPUDescriptorHandleForHeapStart());
 		cbvHandle.Offset(cbvIndex, mCbvSrvUavDescriptorSize);
+
+		// CBV를 shader에 연결 (via RootSignature)
 		cmdList->SetGraphicsRootDescriptorTable(0, cbvHandle);
 
+		// Drawcall
 		cmdList->DrawIndexedInstanced(ri->IndexCount,
 			1, 0, 0, 0);
 	}
@@ -595,4 +619,13 @@ void ToyEngineApp::BuildPSO()
 	wireframePsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME; // 기존 PSO에서 모드만 wireframe으로 변경
 	ThrowIfFailed(md3dDevice->CreateGraphicsPipelineState(
 		&wireframePsoDesc, IID_PPV_ARGS(&mPSOs["opaque_wireframe"])));
+}
+
+void ToyEngineApp::BuildFrameResources()
+{
+	for (int i = 0; i < gNumFrameResources; ++i)
+	{
+		mFrameResources.push_back(std::make_unique<FrameResource>(md3dDevice.Get(),
+			1, (UINT)mAllRitems.size()));
+	}
 }
