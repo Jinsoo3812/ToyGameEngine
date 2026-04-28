@@ -1,7 +1,7 @@
 #pragma once
 #include "../Common/MathHelper.h"
 
-// 화면에 그려질 개별 Object의 정보를 담는 구조체.
+// 하나의 object를 그리는 데 필요한 속성들을 담는 구조체
 struct RenderItem
 {
     RenderItem() = default;
@@ -13,13 +13,20 @@ struct RenderItem
         IndexCount = ritem->IndexCount;
     }
 
+    // Object > World 변환 행렬 (Object의 Transform)
     DirectX::XMFLOAT4X4 World = MathHelper::Identity4x4();
 
-    // Index into the per-frame ObjectCB.
+    int NumFramesDirty = 3;
+
+    // 상수 버퍼에서 이 renderItem의 index
     UINT ObjCBIndex = -1;
 
+	// 이 object가 그릴 MeshGeometry
     MeshGeometry* Geo = nullptr;
     D3D12_PRIMITIVE_TOPOLOGY PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 
-    UINT IndexCount = 0;
+    // DrawIndexedInstanced 호출 시 필요한 매개변수들
+    UINT IndexCount = 0; // 이 RenderItem은 몇 개의 index로 이루어져 있는가?
+    UINT StartIndexLocation = 0; // 이 RenderItem은 인덱스 버퍼의 어디부터 시작하는가?
+    int BaseVertexLocation = 0; // 0번 인덱스는 정점 버퍼의 어디를 가리키는가?
 };

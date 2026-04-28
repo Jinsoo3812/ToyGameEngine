@@ -1,11 +1,12 @@
 // Frank Luna의 저서 및 예제 프로젝트를 기반으로 Realtime Rendering 및 Multithreading을 공부하기 위한 프로젝트입니다.
 
-#include "../Common/d3dApp.h" // Windows 프로그래밍과 닿아있는 DX 초기화 등의 로직
+#include "../Common/d3dApp.h"
 #include "../Common/MathHelper.h"
 #include "../Common/UploadBuffer.h"
 #include "../Common/StringHelper.h"
-#include "RenderItem.h" // 정점 구조체 및 RenderItem 구조체를 포함
-#include "FrameResource.h" // TO DO: 
+#include "../Common/GeometryGenerator.h"
+#include "RenderItem.h"
+#include "FrameResource.h"
 
 using namespace DirectX;
 
@@ -40,15 +41,14 @@ private:
 	// Text로 된 HLSL 파일을 읽어 ByteCode로 컴파일하고 InputLayout을 작성합니다.
 	void BuildShadersAndInputLayout();
 
-	/* 리팩토링 필요 */
-	// Box의 형태를 정의하고 정점 버퍼와 인덱스 버퍼를 생성합니다.
-	void BuildBoxGeometry();
+	// 화면에 그릴 도형들의 meshgeometry를 생성
+	void BuildShapeGeometry();
 
 	// View를 종류 별로 저장하는 Descriptor Heap을 생성합니다.
 	void BuildDescriptorHeaps();
 
-	// ConstantBuffer를 UploadBuffer 객체로 생성합니다.
-	void BuildConstantBuffers();
+	// ConstantBuffer View를 작성합니다. 
+	void BuildConstantBufferViews();
 
 	// RootSignature를 생성합니다.
 	void BuildRootSignature();
@@ -65,7 +65,7 @@ private:
 		const std::vector<RenderItem*>& ritems);
 
 	// Pipeline State Object을 생성합니다.
-	void BuildPSO();
+	void BuildPSOs();
 
 	// FrameResource를 생성합니다.
 	void BuildFrameResources();
@@ -77,14 +77,18 @@ private:
 	// Constant Buffer View를 위한 Descriptor Heap
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> mCbvHeap = nullptr;
 
-	// 상수 버퍼를 담게 도와주는 UploadBuffer 객체
-	// Constant Buffer의 256byte의 배수 할당 규칙 및 UploadHeap만 사용한다는 특징으로 인해 이러한 래퍼 클래스를 사용한다.
-	std::unique_ptr<UploadBuffer<ObjectConstants>> mObjectCB = nullptr; // Object별 상수 버퍼
-	std::unique_ptr<UploadBuffer<PassConstants>> mPassCB = nullptr; // 전역 상수 버퍼
-	int mObjectCount = 1;
-
+	/* 미사용 */
 	// Box의 Mesh를 정의하는 MeshGeometry 객체
 	std::unique_ptr<MeshGeometry> mBoxGeo = nullptr;
+
+	// 화면에 그릴 object들의 MeshGeometry 객체들을 생성
+	std::unordered_map<std::string, std::unique_ptr<MeshGeometry>> mGeometries;
+
+	std::unordered_map<std::string, Microsoft::WRL::ComPtr<ID3DBlob>> mShaders;
+
+	// 그래픽 파이프라인의 상태를 제어하는 여러 객체들(셰이더, InputLayout, RootSignature 등)을 묶어서 저장하는 객체
+	std::unordered_map<std::string, Microsoft::WRL::ComPtr<ID3D12PipelineState>> mPSOs;
+	bool mIsWireframe = false; // Wireframe 모드 Flag
 
 	// 정점 셰이더의 기계어
 	Microsoft::WRL::ComPtr<ID3DBlob> mvsByteCode = nullptr;
@@ -95,12 +99,18 @@ private:
 	// 일대일 대응이므로, C++ 구조체의 멤버 수만큼 필요하다.
 	std::vector<D3D12_INPUT_ELEMENT_DESC> mInputLayout;
 
-	// 그래픽 파이프라인의 상태를 제어하는 여러 객체들(셰이더, InputLayout, RootSignature 등)을 묶어서 저장하는 객체
-	std::unordered_map<std::string, Microsoft::WRL::ComPtr<ID3D12PipelineState>> mPSOs;
-	bool mIsWireframe = false; // Wireframe 모드 Flag
-
+	// 모든 RenderItem
 	std::vector<std::unique_ptr<RenderItem>> mAllRitems;
-	PassConstants mMainPassCB; // What?
+
+	// Render items divided by PSO.
+	std::vector<RenderItem*> mOpaqueRitems;
+
+	// 한 frame을 그릴 때 단위로 사용될 전역 상수 버퍼의 속성들
+	PassConstants mMainPassCB;
+
+	UINT mPassCbvOffset = 0;
+
+	/* 미사용 */
 	int mMovingObjIndex = -1;
 
 	
