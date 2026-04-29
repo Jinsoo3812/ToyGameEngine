@@ -78,33 +78,8 @@ void ToyEngineApp::OnResize()
 void ToyEngineApp::Update(const GameTimer& gt)
 {
 	OnKeyboardInput(gt);
-
-	// Pitch와 Yaw를 이용해 회전 행렬 및 방향 벡터 도출
-	DirectX::XMMATRIX R = DirectX::XMMatrixRotationRollPitchYaw(mPitch, mYaw, 0.0f);
-	DirectX::XMVECTOR forward = DirectX::XMVector3TransformNormal(DirectX::XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f), R);
-	DirectX::XMVECTOR up = DirectX::XMVector3TransformNormal(DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f), R);
-
-	DirectX::XMVECTOR pos = DirectX::XMLoadFloat3(&mCameraPos);
-	DirectX::XMVECTOR target;
-
-	// Alt 키를 누른 상태: 카메라의 회전 (Target을 이동)
-	if (GetAsyncKeyState(VK_MENU) & 0x8000)
-	{
-		target = pos + forward * mRadius;
-		DirectX::XMStoreFloat3(&mCameraTarget, target);
-	}
-	// Alt 키를 누르지 않은 상태: 카메라의 궤도 운동 (Camera 이동)
-	else
-	{
-		target = DirectX::XMLoadFloat3(&mCameraTarget);
-		pos = target - forward * mRadius; // Forward를 뒤집어서 카메라의 위치를 구함
-		DirectX::XMStoreFloat3(&mCameraPos, pos);
-	}
-
-	// View 행렬(World > Camera 변환)
-	DirectX::XMMATRIX view = DirectX::XMMatrixLookAtLH(pos, target, up);
-	XMStoreFloat4x4(&mView, view);
-
+	UpdateCamera(gt);
+	
 	// FrameResources 배열에 순환 접근
 	mCurrFrameResourceIndex = (mCurrFrameResourceIndex + 1) % gNumFrameResources;
 	mCurrFrameResource = mFrameResources[mCurrFrameResourceIndex].get();
@@ -279,6 +254,35 @@ void ToyEngineApp::OnKeyboardInput(const GameTimer& gt)
 	}
 
 	mIsWireframe = bool(GetAsyncKeyState('1') & 0x8000);
+}
+
+void ToyEngineApp::UpdateCamera(const GameTimer& gt)
+{
+	// Pitch와 Yaw를 이용해 회전 행렬 및 방향 벡터 도출
+	DirectX::XMMATRIX R = DirectX::XMMatrixRotationRollPitchYaw(mPitch, mYaw, 0.0f);
+	DirectX::XMVECTOR forward = DirectX::XMVector3TransformNormal(DirectX::XMVectorSet(0.0f, 0.0f, 1.0f, 0.0f), R);
+	DirectX::XMVECTOR up = DirectX::XMVector3TransformNormal(DirectX::XMVectorSet(0.0f, 1.0f, 0.0f, 0.0f), R);
+
+	DirectX::XMVECTOR pos = DirectX::XMLoadFloat3(&mCameraPos);
+	DirectX::XMVECTOR target;
+
+	// Alt 키를 누른 상태: 카메라의 회전 (Target을 이동)
+	if (GetAsyncKeyState(VK_MENU) & 0x8000)
+	{
+		target = pos + forward * mRadius;
+		DirectX::XMStoreFloat3(&mCameraTarget, target);
+	}
+	// Alt 키를 누르지 않은 상태: 카메라의 궤도 운동 (Camera 이동)
+	else
+	{
+		target = DirectX::XMLoadFloat3(&mCameraTarget);
+		pos = target - forward * mRadius; // Forward를 뒤집어서 카메라의 위치를 구함
+		DirectX::XMStoreFloat3(&mCameraPos, pos);
+	}
+
+	// View 행렬(World > Camera 변환)
+	DirectX::XMMATRIX view = DirectX::XMMatrixLookAtLH(pos, target, up);
+	XMStoreFloat4x4(&mView, view);
 }
 
 void ToyEngineApp::BuildShadersAndInputLayout()
@@ -739,7 +743,7 @@ void ToyEngineApp::BuildPSOs()
 		mShaders["opaquePS"]->GetBufferSize()
 	}; // 픽셀 셰이더의 기계어(ByteCode) 포함
 	opaquePsoDesc.RasterizerState = CD3DX12_RASTERIZER_DESC(D3D12_DEFAULT);
-	opaquePsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_WIREFRAME;
+	opaquePsoDesc.RasterizerState.FillMode = D3D12_FILL_MODE_SOLID;
 	opaquePsoDesc.BlendState = CD3DX12_BLEND_DESC(D3D12_DEFAULT);
 	opaquePsoDesc.DepthStencilState = CD3DX12_DEPTH_STENCIL_DESC(D3D12_DEFAULT);
 	opaquePsoDesc.SampleMask = UINT_MAX;

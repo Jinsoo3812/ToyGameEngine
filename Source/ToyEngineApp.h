@@ -37,6 +37,8 @@ private:
 	virtual void OnKeyboardDown(WPARAM btnState)override; // 키보드가 처음 눌릴 때 한 번 호출됩니다.
 	void OnKeyboardInput(const GameTimer& gt); // 키보드의 상태를 매 프레임마다 체크하여 처리합니다.
 
+	void UpdateCamera(const GameTimer& gt); // 카메라의 위치와 방향을 갱신합니다.
+
 	// HLSL 셰이더를 로드하고 그 명세서를 정의합니다.
 	// Text로 된 HLSL 파일을 읽어 ByteCode로 컴파일하고 InputLayout을 작성합니다.
 	void BuildShadersAndInputLayout();
