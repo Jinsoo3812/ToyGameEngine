@@ -27,6 +27,16 @@ struct PassConstants
     float DeltaTime = 0.0f;
 };
 
+struct MaterialConstants
+{
+	DirectX::XMFLOAT4 DiffuseAlbedo = { 1.0f, 1.0f, 1.0f, 1.0f };
+	DirectX::XMFLOAT3 FresnelR0 = { 0.01f, 0.01f, 0.01f };
+    float Roughness = 0.25f;
+
+    // Texture mapping에 사용되는 행렬
+	DirectX::XMFLOAT4X4 MatTransform = MathHelper::Identity4x4();
+};
+
 struct Vertex
 {
     DirectX::XMFLOAT3 Pos;
@@ -50,6 +60,7 @@ public:
     // 각 frame은 시간의 흐름에 따른 CB의 복제본을 소유.
     std::unique_ptr<UploadBuffer<PassConstants>> PassCB = nullptr;
     std::unique_ptr<UploadBuffer<ObjectConstants>> ObjectCB = nullptr;
+	std::unique_ptr<UploadBuffer<MaterialConstants>> MaterialCB = nullptr;
 
     // CPU가 다시 해당 frame을 작업할 차례가 다가왔을 때 확인할 fence
     UINT64 Fence = 0;

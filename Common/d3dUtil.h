@@ -234,32 +234,29 @@ struct MaterialConstants
 	DirectX::XMFLOAT4X4 MatTransform = MathHelper::Identity4x4();
 };
 
-// Simple struct to represent a material for our demos.  A production 3D engine
-// would likely create a class hierarchy of Materials.
+// Matarial(재질)은 빛이 물체의 표면과 상호작용하는 방식을 결정하는 속성들의 집합이다.
+// 반사, 흡수, 굴절, 매끄러움, 투명도 등이 있다.
 struct Material
 {
-	// Unique material name for lookup.
+	// Material 조회에 사용되는 이름
 	std::string Name;
 
-	// Index into constant buffer corresponding to this material.
+	// 이 material에 해당하는 상수 버퍼의 색인.
 	int MatCBIndex = -1;
 
-	// Index into SRV heap for diffuse texture.
+	// SRV heap에서 이 material에 해당하는 분산 texture의 색인.
 	int DiffuseSrvHeapIndex = -1;
 
 	// Index into SRV heap for normal texture.
 	int NormalSrvHeapIndex = -1;
 
-	// Dirty flag indicating the material has changed and we need to update the constant buffer.
-	// Because we have a material constant buffer for each FrameResource, we have to apply the
-	// update to each FrameResource.  Thus, when we modify a material we should set 
-	// NumFramesDirty = gNumFrameResources so that each frame resource gets the update.
+	// 다른 frame에 의해 material이 변경되었음을 나타내는 flag
 	int NumFramesDirty = gNumFrameResources;
 
-	// Material constant buffer data used for shading.
-	DirectX::XMFLOAT4 DiffuseAlbedo = { 1.0f, 1.0f, 1.0f, 1.0f };
-	DirectX::XMFLOAT3 FresnelR0 = { 0.01f, 0.01f, 0.01f };
-	float Roughness = .25f;
+	// Shader에서 사용하는 material 상수 버퍼의 속성들
+	DirectX::XMFLOAT4 DiffuseAlbedo = { 1.0f, 1.0f, 1.0f, 1.0f }; // 난반사율
+	DirectX::XMFLOAT3 FresnelR0 = { 0.01f, 0.01f, 0.01f }; // 프레넬 반사율
+	float Roughness = .25f; // 거칠기 [0, 1] (0: 매끄러운 표면, 1: 거친 표면)
 	DirectX::XMFLOAT4X4 MatTransform = MathHelper::Identity4x4();
 };
 

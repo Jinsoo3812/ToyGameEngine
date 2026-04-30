@@ -46,6 +46,8 @@ private:
 	// 화면에 그릴 도형들의 meshgeometry를 생성
 	void BuildShapeGeometry();
 
+	void BuildMaterials();
+
 	// View를 종류 별로 저장하는 Descriptor Heap을 생성합니다.
 	void BuildDescriptorHeaps();
 
@@ -79,10 +81,6 @@ private:
 	// Constant Buffer View를 위한 Descriptor Heap
 	Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> mCbvHeap = nullptr;
 
-	/* 미사용 */
-	// Box의 Mesh를 정의하는 MeshGeometry 객체
-	std::unique_ptr<MeshGeometry> mBoxGeo = nullptr;
-
 	// 화면에 그릴 object들의 MeshGeometry 객체들을 생성
 	std::unordered_map<std::string, std::unique_ptr<MeshGeometry>> mGeometries;
 
@@ -111,10 +109,6 @@ private:
 	PassConstants mMainPassCB;
 
 	UINT mPassCbvOffset = 0;
-
-	/* 미사용 */
-	int mMovingObjIndex = -1;
-
 	
 	DirectX::XMFLOAT4X4 mWorld = MathHelper::Identity4x4(); // Object > World 변환 행렬
 	DirectX::XMFLOAT4X4 mView = MathHelper::Identity4x4(); // World > Camera 변환 행렬
@@ -140,4 +134,7 @@ private:
 	std::vector<std::unique_ptr<FrameResource>> mFrameResources; // FrameResources Container
 	FrameResource* mCurrFrameResource = nullptr; // 현재 CPU가 작업 중인 FrameResource
 	int mCurrFrameResourceIndex = 0; // CPU가 작업 중인 FrameResource의 index
+
+	/* Materials */
+	std::unordered_map<std::string, std::unique_ptr<Material>> mMaterials; // 이름으로 Material을 조회하기 위한 Map
 };

@@ -427,6 +427,25 @@ void ToyEngineApp::BuildShapeGeometry()
 	mGeometries[geo->Name] = std::move(geo);
 }
 
+void ToyEngineApp::BuildMaterials()
+{
+	// Grass Material 속성
+	auto grass = std::make_unique<Material>();
+	grass->Name = "grass";
+	grass->MatCBIndex = 0;
+	grass->DiffuseAlbedo = XMFLOAT4(0.2f, 0.6f, 0.6f, 1.0f);
+	grass->FresnelR0 = XMFLOAT3(0.01f, 0.01f, 0.01f);
+	grass->Roughness = 0.125f;
+
+	// Water Material 속성
+	auto water = std::make_unique<Material>();
+	water->Name = "water";
+	water->MatCBIndex = 1;
+	water->DiffuseAlbedo = XMFLOAT4(0.0f, 0.2f, 0.6f, 1.0f);
+	water->FresnelR0 = XMFLOAT3(0.01f, 0.01f, 0.01f);
+	water->Roughness = 0.0f;
+}
+
 void ToyEngineApp::BuildDescriptorHeaps()
 {
 	// 화면에 그려질 render item의 총 개수
@@ -652,6 +671,24 @@ void ToyEngineApp::UpdateObjectCBs(const GameTimer& gt)
 			currObjectCB->CopyData(e->ObjCBIndex, objConstants);
 
 			e->NumFramesDirty--;
+		}
+	}
+
+	auto currMaterialCB = mCurrFrameResource->MaterialCB.get();
+	for (auto& e : mMaterials) {
+		Material* mat = e.second.get();
+		if (mat->NumFramesDirty > 0)
+		{
+			XMMATRIX matTransform = XMLoadFloat4x4(&mat->MatTransform);
+
+			MaterialConstants matConstants;
+			matConstants.DiffuseAlbedo = mat->DiffuseAlbedo;
+			matConstants.FresnelR0 = mat->FresnelR0;
+			matConstants.Roughness = mat->Roughness;
+			
+			currMaterialCB->CopyData(mat->MatCBIndex, matConstants);
+
+			mat->NumFramesDirty--;
 		}
 	}
 }
