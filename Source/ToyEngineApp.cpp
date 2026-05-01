@@ -444,6 +444,10 @@ void ToyEngineApp::BuildMaterials()
 	water->DiffuseAlbedo = XMFLOAT4(0.0f, 0.2f, 0.6f, 1.0f);
 	water->FresnelR0 = XMFLOAT3(0.01f, 0.01f, 0.01f);
 	water->Roughness = 0.0f;
+
+	// 관리 목록에 추가
+	mMaterials["grass"] = std::move(grass);
+	mMaterials["water"] = std::move(water);
 }
 
 void ToyEngineApp::BuildDescriptorHeaps()
@@ -527,33 +531,35 @@ void ToyEngineApp::BuildConstantBufferViews()
 
 void ToyEngineApp::BuildRootSignature()
 {
-	// Shader programs typically require resources as input (constant buffers,
-	// textures, samplers).  The root signature defines the resources the shader
-	// programs expect.  If we think of the shader programs as a function, and
-	// the input resources as function parameters, then the root signature can be
-	// thought of as defining the function signature.  
+	// Per-Pass 상수 버퍼용 Descriptor Table (b1 바인드)
+	CD3DX12_DESCRIPTOR_RANGE cbvTablePass;
+	cbvTablePass.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 1);
 
-	// Shader에게 View와 Resgister Slot의 연결을 알려주는 Descriptor Table 생성
-	CD3DX12_DESCRIPTOR_RANGE cbvTable0;
-	cbvTable0.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 0);   // b0: per-object World
-	CD3DX12_DESCRIPTOR_RANGE cbvTable1;
-	cbvTable1.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 1);   // b1: per-pass data
+	// Material 상수 버퍼용 Descriptor Table (b2 바인드)
+	CD3DX12_DESCRIPTOR_RANGE cbvTableMaterial;
+	cbvTablePass.Init(D3D12_DESCRIPTOR_RANGE_TYPE_CBV, 1, 2);
 
-	// Root Parameter Slot과 Descriptor Table 연결
-	CD3DX12_ROOT_PARAMETER slotRootParameter[2];
-	slotRootParameter[0].InitAsDescriptorTable(1, &cbvTable0);
-	slotRootParameter[1].InitAsDescriptorTable(1, &cbvTable1);
-
-	// Input Assembler 단계에서 InputLayout을 사용할 수 있도록 승인.
+	CD3DX12_ROOT_PARAMETER slotRootParameter[3];
+	slotRootParameter[0].InitAsConstantBufferView(0); // b0 : Object CBV
+	slotRootParameter[1].InitAsDescriptorTable(1, &cbvTablePass); // b1 : Pass CBV
+	slotRootParameter[2].InitAsDescriptorTable(1, &cbvTableMaterial); // b2 : Material CBV
+	
+	// IA 단계에서 Inputlayout을 사용할 수 있도록 승인
 	// 정점/색인 버퍼는 RootSignature가 아닌 Input Slot에 의해 IA 단계에 직접 묶이고, 이곳에서는 그 권한만 승인함
-	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(2, slotRootParameter, 0, nullptr,
+	CD3DX12_ROOT_SIGNATURE_DESC rootSigDesc(
+		3,
+		slotRootParameter,
+		0,
+		nullptr,
 		D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT);
 
-	// rootSigDesc를 GPU가 읽을 수 있도록 직렬화
 	Microsoft::WRL::ComPtr<ID3DBlob> serializedRootSig = nullptr;
 	Microsoft::WRL::ComPtr<ID3DBlob> errorBlob = nullptr;
-	HRESULT hr = D3D12SerializeRootSignature(&rootSigDesc, D3D_ROOT_SIGNATURE_VERSION_1,
-		serializedRootSig.GetAddressOf(), errorBlob.GetAddressOf());
+	HRESULT hr = D3D12SerializeRootSignature(
+		&rootSigDesc,
+		D3D_ROOT_SIGNATURE_VERSION_1,
+		serializedRootSig.GetAddressOf(),
+		errorBlob.GetAddressOf());
 
 	if (errorBlob != nullptr)
 	{
@@ -561,7 +567,7 @@ void ToyEngineApp::BuildRootSignature()
 	}
 	ThrowIfFailed(hr);
 
-	// VRAM에 Root Signature를 생성하고 mRootSignature에 저장
+	// VRAM에 Root Signature 생성
 	ThrowIfFailed(md3dDevice->CreateRootSignature(
 		0,
 		serializedRootSig->GetBufferPointer(),
@@ -653,7 +659,7 @@ void ToyEngineApp::BuildRenderItems()
 
 void ToyEngineApp::UpdateObjectCBs(const GameTimer& gt)
 {
-	// 현재 frame의 상수 버퍼 참조
+	// 현재 frame의 Obejct 상수 버퍼 참조
 	auto currObjectCB = mCurrFrameResource->ObjectCB.get();
 	for (auto& e : mAllRitems)
 	{
@@ -674,11 +680,13 @@ void ToyEngineApp::UpdateObjectCBs(const GameTimer& gt)
 		}
 	}
 
+	// 현재 frame의 Material 상수 버퍼 참조
 	auto currMaterialCB = mCurrFrameResource->MaterialCB.get();
 	for (auto& e : mMaterials) {
 		Material* mat = e.second.get();
+		// 다른 frame에서 상수 버퍼를 변경했다는 flag가 있다면 (Count 방식)
 		if (mat->NumFramesDirty > 0)
-		{
+		{	
 			XMMATRIX matTransform = XMLoadFloat4x4(&mat->MatTransform);
 
 			MaterialConstants matConstants;
@@ -727,10 +735,11 @@ void ToyEngineApp::UpdateMainPassCB(const GameTimer& gt)
 void ToyEngineApp::DrawRenderItems(ID3D12GraphicsCommandList* cmdList,
 	const std::vector<RenderItem*>& ritems)
 {
-	// 이번 frame에서 object constant의 크기
+	// 이번 frame에서 사용할 object 상수 버퍼와 material 상수 버퍼의 크기 및 참조;
 	UINT objCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(ObjectConstants));
-
+	UINT matCBByteSize = d3dUtil::CalcConstantBufferByteSize(sizeof(MaterialConstants));
 	auto objectCB = mCurrFrameResource->ObjectCB->Resource();
+	auto matCB = mCurrFrameResource->MaterialCB->Resource();
 
 	// For each render item...
 	for (size_t i = 0; i < ritems.size(); ++i)
@@ -745,13 +754,19 @@ void ToyEngineApp::DrawRenderItems(ID3D12GraphicsCommandList* cmdList,
 		cmdList->IASetIndexBuffer(&ibv);
 		cmdList->IASetPrimitiveTopology(ri->PrimitiveType);
 
-		// 이번 frame의 CBV의 위치 오프셋 계산
-		UINT cbvIndex = mCurrFrameResourceIndex * (UINT)mOpaqueRitems.size() + ri->ObjCBIndex;
-		auto cbvHandle = CD3DX12_GPU_DESCRIPTOR_HANDLE(mCbvHeap->GetGPUDescriptorHandleForHeapStart());
-		cbvHandle.Offset(cbvIndex, mCbvSrvUavDescriptorSize);
+		// Object 상수 버퍼의 VRAM 시작 주소
+		D3D12_GPU_VIRTUAL_ADDRESS objCBAddress = objectCB->GetGPUVirtualAddress();
 
-		// Root Signature 0번과 Object CBV 연결
-		cmdList->SetGraphicsRootDescriptorTable(0, cbvHandle);
+		// 현재 render item에 맞게 index 이동
+		objCBAddress += ri->ObjCBIndex * objCBByteSize;
+
+		// Root Descriptor이므로 상수 버퍼의 주소를 Root signature 0번에 직접 바인딩
+		cmdList->SetGraphicsRootConstantBufferView(0, objCBAddress);
+		
+		UINT matCbvIndex = mCurrFrameResourceIndex * (UINT)mMaterials.size() + ri->Mat->MatCBIndex;
+		auto matCbvHandle = CD3DX12_GPU_DESCRIPTOR_HANDLE(mCbvHeap->GetGPUDescriptorHandleForHeapStart());
+		matCbvHandle.Offset(matCbvIndex, mCbvSrvUavDescriptorSize);
+		cmdList->SetGraphicsRootDescriptorTable(2, matCbvHandle);
 
 		// Draw Call!!
 		cmdList->DrawIndexedInstanced(ri->IndexCount, 1, ri->StartIndexLocation, ri->BaseVertexLocation, 0);

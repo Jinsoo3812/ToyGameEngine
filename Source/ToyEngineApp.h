@@ -46,6 +46,7 @@ private:
 	// 화면에 그릴 도형들의 meshgeometry를 생성
 	void BuildShapeGeometry();
 
+	// Material을 생성
 	void BuildMaterials();
 
 	// View를 종류 별로 저장하는 Descriptor Heap을 생성합니다.
