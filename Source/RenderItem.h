@@ -21,9 +21,9 @@ struct RenderItem
     // 상수 버퍼에서 이 renderItem의 index
     UINT ObjCBIndex = -1;
 
-    MeshGeometry* Geo = nullptr; // 이 object가 그릴 MeshGeometry
-	Material* Mat = nullptr; // 이 object의 Material
-    D3D12_PRIMITIVE_TOPOLOGY PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST; // 이 object를 그릴 때 사용할 기본 도형
+	// 이 object가 그릴 MeshGeometry
+    MeshGeometry* Geo = nullptr;
+    D3D12_PRIMITIVE_TOPOLOGY PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 
     // DrawIndexedInstanced 호출 시 필요한 매개변수들
     UINT IndexCount = 0; // 이 RenderItem은 몇 개의 index로 이루어져 있는가?
