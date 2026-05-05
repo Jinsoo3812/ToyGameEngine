@@ -290,8 +290,8 @@ void ToyEngineApp::BuildShadersAndInputLayout()
 	HRESULT hr = S_OK;
 
 	// HLSL을 컴파일 (GPU를 위한 ByteCode로 변환)
-	mShaders["standardVS"] = d3dUtil::CompileShader(L"Shaders\\color.hlsl", nullptr, "VS", "vs_5_1");
-	mShaders["opaquePS"] = d3dUtil::CompileShader(L"Shaders\\color.hlsl", nullptr, "PS", "ps_5_1");
+	mShaders["standardVS"] = d3dUtil::CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS", "vs_5_1");
+	mShaders["opaquePS"] = d3dUtil::CompileShader(L"Shaders\\Default.hlsl", nullptr, "PS", "ps_5_1");
 
 	// InputLayout의 작성
 	mInputLayout =
