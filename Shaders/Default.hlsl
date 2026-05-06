@@ -1,5 +1,5 @@
 //***************************************************************************************
-// color.hlsl by Frank Luna (C) 2015 All Rights Reserved.
+// Default.hlsl by Frank Luna (C) 2015 All Rights Reserved.
 //
 // Default shader, currently supports lighting.
 //***************************************************************************************
@@ -23,20 +23,15 @@
 Texture2D gDiffuseMap : register(t0);
 SamplerState gsamLinear : register(s0);
 
+
+// Constant data that varies per frame.
 cbuffer cbPerObject : register(b0)
 {
     float4x4 gWorld;
     float4x4 gTexTransform;
 };
 
-cbuffer cbMaterial : register(b1)
-{
-    float4 gDiffuseAlbedo;
-    float3 gFresnelR0;
-    float gRoughness;
-    float4x4 gMatTransform;
-};
-
+// Constant data that varies per material.
 cbuffer cbPass : register(b1)
 {
     float4x4 gView;
@@ -62,7 +57,14 @@ cbuffer cbPass : register(b1)
     Light gLights[MaxLights];
 };
 
-// 정점 셰이더의 Input Signature
+cbuffer cbMaterial : register(b2)
+{
+    float4 gDiffuseAlbedo;
+    float3 gFresnelR0;
+    float gRoughness;
+    float4x4 gMatTransform;
+};
+
 struct VertexIn
 {
     float3 PosL : POSITION;
@@ -70,7 +72,6 @@ struct VertexIn
     float2 TexC : TEXCOORD;
 };
 
-// 정점 셰이더의 Output Signature
 struct VertexOut
 {
     float4 PosH : SV_POSITION;
@@ -81,49 +82,48 @@ struct VertexOut
 
 VertexOut VS(VertexIn vin)
 {
-    VertexOut vout;
+    VertexOut vout = (VertexOut) 0.0f;
 	
-	// 정점의 world 좌표
+    // Transform to world space.
     float4 posW = mul(float4(vin.PosL, 1.0f), gWorld);
     vout.PosW = posW.xyz;
-    
-    // 비균등 비례 변환이 없다고 가정한 법선 벡터의 월드 좌표 변환 (회전과 이동만 적용)
+
+    // Assumes nonuniform scaling; otherwise, need to use inverse-transpose of world matrix.
     vout.NormalW = mul(vin.NormalL, (float3x3) gWorld);
 
-    // 동차 클립 공강 좌표로 변환
+    // Transform to homogeneous clip space.
     vout.PosH = mul(posW, gViewProj);
-
-    // Output vertex attributes for interpolation across triangle.
+	
+	// Output vertex attributes for interpolation across triangle.
     float4 texC = mul(float4(vin.TexC, 0.0f, 1.0f), gTexTransform);
     vout.TexC = mul(texC, gMatTransform).xy;
-    
+
     return vout;
 }
 
 float4 PS(VertexOut pin) : SV_Target
 {
     float4 diffuseAlbedo = gDiffuseMap.Sample(gsamLinear, pin.TexC) * gDiffuseAlbedo;
-    
-	// 법선 벡터 정규화
+
+    // Interpolating normal can unnormalize it, so renormalize it.
     pin.NormalW = normalize(pin.NormalW);
 
-    // 표면에서 카메라로의 정규 벡터
+    // Vector from point being lit to eye. 
     float3 toEyeW = normalize(gEyePosW - pin.PosW);
 
-	// 주변광 계산 (주변광 세기 * 난반사율)
-    float4 ambient = gAmbientLight * gDiffuseAlbedo;
+    // Light terms.
+    float4 ambient = gAmbientLight * diffuseAlbedo;
 
-    // 직접광 계산
     const float shininess = 1.0f - gRoughness;
-    Material mat = { gDiffuseAlbedo, gFresnelR0, shininess };
+    Material mat = { diffuseAlbedo, gFresnelR0, shininess };
     float3 shadowFactor = 1.0f;
     float4 directLight = ComputeLighting(gLights, mat, pin.PosW,
         pin.NormalW, toEyeW, shadowFactor);
 
     float4 litColor = ambient + directLight;
 
-    // 일반적으로, 알파값은 Material의 난반사율에서 가져온다.
-    litColor.a = gDiffuseAlbedo.a;
+    // Common convention to take alpha from diffuse material.
+    litColor.a = diffuseAlbedo.a;
 
     return litColor;
 }

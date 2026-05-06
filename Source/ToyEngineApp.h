@@ -71,6 +71,7 @@ private:
 	// 상수 버퍼 값을 갱신합니다.
 	void UpdateObjectCBs(const GameTimer& gt);
 	void UpdateMainPassCB(const GameTimer& gt);
+	void UpdateMaterialCBs(const GameTimer& gt);
 
 	// RenderItem을 순회하며 Drawcall 호출
 	void DrawRenderItems(ID3D12GraphicsCommandList* cmdList, const std::vector<RenderItem*>& ritems);

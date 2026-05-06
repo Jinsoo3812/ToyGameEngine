@@ -74,7 +74,7 @@ void ToyEngineApp::OnResize()
 	D3DApp::OnResize();
 
 	// 창 크기(화면 비율)가 바뀌었으므로 투영 행렬 P를 다시 계산
-	DirectX::XMMATRIX P = DirectX::XMMatrixPerspectiveFovLH(0.25f * MathHelper::Pi, AspectRatio(), 1.0f, 1000.0f);
+	DirectX::XMMATRIX P = DirectX::XMMatrixPerspectiveFovLH(0.25f * MathHelper::Pi, AspectRatio(), 0.01f, 1000.0f);
 	XMStoreFloat4x4(&mProj, P);
 }
 
@@ -98,6 +98,7 @@ void ToyEngineApp::Update(const GameTimer& gt)
 
 	UpdateObjectCBs(gt);
 	UpdateMainPassCB(gt);
+	UpdateMaterialCBs(gt);
 }
 
 void ToyEngineApp::Draw(const GameTimer& gt)
@@ -283,15 +284,13 @@ void ToyEngineApp::BuildShadersAndInputLayout()
 {
 	HRESULT hr = S_OK;
 
-	// HLSL을 컴파일 (GPU를 위한 ByteCode로 변환)
-	mShaders["standardVS"] = d3dUtil::CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS", "vs_5_1");
-	mShaders["opaquePS"] = d3dUtil::CompileShader(L"Shaders\\Default.hlsl", nullptr, "PS", "ps_5_1");
+	mShaders["standardVS"] = d3dUtil::CompileShader(L"Shaders\\Default.hlsl", nullptr, "VS", "vs_5_0");
+	mShaders["opaquePS"] = d3dUtil::CompileShader(L"Shaders\\Default.hlsl", nullptr, "PS", "ps_5_0");
 
-	// InputLayout의 작성
 	mInputLayout =
 	{
 		{ "POSITION", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 0, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
-		{ "COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
+		{ "NORMAL", 0, DXGI_FORMAT_R32G32B32_FLOAT, 0, 12, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
 		{ "TEXCOORD", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 24, D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0 },
 	};
 }
@@ -500,7 +499,7 @@ void ToyEngineApp::UpdateMainPassCB(const GameTimer& gt)
 	mMainPassCB.EyePosW = mCameraPos;
 	mMainPassCB.RenderTargetSize = XMFLOAT2((float)mClientWidth, (float)mClientHeight);
 	mMainPassCB.InvRenderTargetSize = XMFLOAT2(1.0f / mClientWidth, 1.0f / mClientHeight);
-	mMainPassCB.NearZ = 1.0f;
+	mMainPassCB.NearZ = 0.01f;
 	mMainPassCB.FarZ = 1000.0f;
 	mMainPassCB.TotalTime = gt.TotalTime();
 	mMainPassCB.DeltaTime = gt.DeltaTime();
@@ -514,6 +513,32 @@ void ToyEngineApp::UpdateMainPassCB(const GameTimer& gt)
 
 	auto currPassCB = mCurrFrameResource->PassCB.get();
 	currPassCB->CopyData(0, mMainPassCB);
+}
+
+void ToyEngineApp::UpdateMaterialCBs(const GameTimer& gt)
+{
+	auto currMaterialCB = mCurrFrameResource->MaterialCB.get();
+	for (auto& e : mMaterials)
+	{
+		// Only update the cbuffer data if the constants have changed.  If the cbuffer
+		// data changes, it needs to be updated for each FrameResource.
+		Material* mat = e.second.get();
+		if (mat->NumFramesDirty > 0)
+		{
+			XMMATRIX matTransform = XMLoadFloat4x4(&mat->MatTransform);
+
+			MaterialConstants matConstants;
+			matConstants.DiffuseAlbedo = mat->DiffuseAlbedo;
+			matConstants.FresnelR0 = mat->FresnelR0;
+			matConstants.Roughness = mat->Roughness;
+			XMStoreFloat4x4(&matConstants.MatTransform, XMMatrixTranspose(matTransform));
+
+			currMaterialCB->CopyData(mat->MatCBIndex, matConstants);
+
+			// Next FrameResource need to be updated too.
+			mat->NumFramesDirty--;
+		}
+	}
 }
 
 void ToyEngineApp::DrawRenderItems(ID3D12GraphicsCommandList* cmdList,
