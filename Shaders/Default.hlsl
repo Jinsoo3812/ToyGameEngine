@@ -20,9 +20,13 @@
 // Include structures and functions for lighting.
 #include "LightingUtil.hlsl"
 
+Texture2D gDiffuseMap : register(t0);
+SamplerState gsamLinear : register(s0);
+
 cbuffer cbPerObject : register(b0)
 {
     float4x4 gWorld;
+    float4x4 gTexTransform;
 };
 
 cbuffer cbMaterial : register(b1)
@@ -50,23 +54,29 @@ cbuffer cbPass : register(b1)
     float gTotalTime;
     float gDeltaTime;
     float4 gAmbientLight;
-    
+
+    // Indices [0, NUM_DIR_LIGHTS) are directional lights;
+    // indices [NUM_DIR_LIGHTS, NUM_DIR_LIGHTS+NUM_POINT_LIGHTS) are point lights;
+    // indices [NUM_DIR_LIGHTS+NUM_POINT_LIGHTS, NUM_DIR_LIGHTS+NUM_POINT_LIGHT+NUM_SPOT_LIGHTS)
+    // are spot lights for a maximum of MaxLights per object.
     Light gLights[MaxLights];
 };
 
 // 정점 셰이더의 Input Signature
 struct VertexIn
 {
-    float3 PosL : POSITION; // 로컬 좌표
-    float3 NormalL : NORMAL; // 로컬 법선 벡터
+    float3 PosL : POSITION;
+    float3 NormalL : NORMAL;
+    float2 TexC : TEXCOORD;
 };
 
 // 정점 셰이더의 Output Signature
 struct VertexOut
 {
-    float4 PosH : SV_POSITION; // 동차 클립 공간 좌표
-    float3 PosW : POSITION; // 월드 좌표
-    float3 NormalW : NORMAL; // 월드 법선 벡터
+    float4 PosH : SV_POSITION;
+    float3 PosW : POSITION;
+    float3 NormalW : NORMAL;
+    float2 TexC : TEXCOORD;
 };
 
 VertexOut VS(VertexIn vin)
@@ -83,11 +93,17 @@ VertexOut VS(VertexIn vin)
     // 동차 클립 공강 좌표로 변환
     vout.PosH = mul(posW, gViewProj);
 
+    // Output vertex attributes for interpolation across triangle.
+    float4 texC = mul(float4(vin.TexC, 0.0f, 1.0f), gTexTransform);
+    vout.TexC = mul(texC, gMatTransform).xy;
+    
     return vout;
 }
 
 float4 PS(VertexOut pin) : SV_Target
 {
+    float4 diffuseAlbedo = gDiffuseMap.Sample(gsamLinear, pin.TexC) * gDiffuseAlbedo;
+    
 	// 법선 벡터 정규화
     pin.NormalW = normalize(pin.NormalW);
 
