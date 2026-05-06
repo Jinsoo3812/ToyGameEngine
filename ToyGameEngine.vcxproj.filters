@@ -43,6 +43,7 @@
     <ClCompile Include="Source\FrameResource.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
+    <ClCompile Include="Source\AssetManager.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Common\Camera.h">
@@ -82,6 +83,9 @@
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="Source\FrameResource.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\AssetManager.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
   </ItemGroup>

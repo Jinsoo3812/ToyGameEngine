@@ -1,6 +1,7 @@
 ﻿#include "ToyEngineApp.h"
 #include "Utility/Log.h" // 원하는 로그 출력을 도와주는 Utility
 #include <DirectXColors.h>
+#include "AssetManager.h"
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE prevInstance,
 	PSTR cmdLine, int showCmd)
@@ -309,52 +310,14 @@ void ToyEngineApp::LoadTextures()
 
 void ToyEngineApp::BuildShapeGeometry()
 {
-	GeometryGenerator geoGen;
-	GeometryGenerator::MeshData box = geoGen.CreateBox(1.0f, 1.0f, 1.0f, 3);
+	// 외부 바이너리 파일 로드
+	std::string filePath = "C:\\Graphic Programming\\ToyAssetBuilder\\San_Miguel\\san-miguel.toygeom";
+	auto geo = AssetManager::LoadBinaryModel("SanMiguelGeo", filePath, md3dDevice.Get(), mCommandList.Get());
 
-	SubmeshGeometry boxSubmesh;
-	boxSubmesh.IndexCount = (UINT)box.Indices32.size();
-	boxSubmesh.StartIndexLocation = 0;
-	boxSubmesh.BaseVertexLocation = 0;
-
-
-	std::vector<Vertex> vertices(box.Vertices.size());
-
-	for (size_t i = 0; i < box.Vertices.size(); ++i)
+	if (geo != nullptr)
 	{
-		vertices[i].Pos = box.Vertices[i].Position;
-		vertices[i].Normal = box.Vertices[i].Normal;
-		vertices[i].TexC = box.Vertices[i].TexC;
+		mGeometries[geo->Name] = std::move(geo);
 	}
-
-	std::vector<std::uint16_t> indices = box.GetIndices16();
-
-	const UINT vbByteSize = (UINT)vertices.size() * sizeof(Vertex);
-	const UINT ibByteSize = (UINT)indices.size() * sizeof(std::uint16_t);
-
-	auto geo = std::make_unique<MeshGeometry>();
-	geo->Name = "boxGeo";
-
-	ThrowIfFailed(D3DCreateBlob(vbByteSize, &geo->VertexBufferCPU));
-	CopyMemory(geo->VertexBufferCPU->GetBufferPointer(), vertices.data(), vbByteSize);
-
-	ThrowIfFailed(D3DCreateBlob(ibByteSize, &geo->IndexBufferCPU));
-	CopyMemory(geo->IndexBufferCPU->GetBufferPointer(), indices.data(), ibByteSize);
-
-	geo->VertexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(),
-		mCommandList.Get(), vertices.data(), vbByteSize, geo->VertexBufferUploader);
-
-	geo->IndexBufferGPU = d3dUtil::CreateDefaultBuffer(md3dDevice.Get(),
-		mCommandList.Get(), indices.data(), ibByteSize, geo->IndexBufferUploader);
-
-	geo->VertexByteStride = sizeof(Vertex);
-	geo->VertexBufferByteSize = vbByteSize;
-	geo->IndexFormat = DXGI_FORMAT_R16_UINT;
-	geo->IndexBufferByteSize = ibByteSize;
-
-	geo->DrawArgs["box"] = boxSubmesh;
-
-	mGeometries[geo->Name] = std::move(geo);
 }
 
 void ToyEngineApp::BuildMaterials()
@@ -437,17 +400,24 @@ void ToyEngineApp::BuildRootSignature()
 
 void ToyEngineApp::BuildRenderItems()
 {
-	auto boxRitem = std::make_unique<RenderItem>();
-	boxRitem->ObjCBIndex = 0;
-	boxRitem->Mat = mMaterials["woodCrate"].get();
-	boxRitem->Geo = mGeometries["boxGeo"].get();
-	boxRitem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-	boxRitem->IndexCount = boxRitem->Geo->DrawArgs["box"].IndexCount;
-	boxRitem->StartIndexLocation = boxRitem->Geo->DrawArgs["box"].StartIndexLocation;
-	boxRitem->BaseVertexLocation = boxRitem->Geo->DrawArgs["box"].BaseVertexLocation;
-	mAllRitems.push_back(std::move(boxRitem));
+	auto geo = mGeometries["SanMiguelGeo"].get();
+	UINT objCBIndex = 0;
 
-	// All the render items are opaque.
+	// 로드된 모든 서브메쉬에 대해 RenderItem 동적 생성
+	for (auto const& [submeshName, submeshGeo] : geo->DrawArgs)
+	{
+		auto ritem = std::make_unique<RenderItem>();
+		ritem->ObjCBIndex = objCBIndex++;
+		ritem->Mat = mMaterials["woodCrate"].get(); // 임시 재질 적용
+		ritem->Geo = geo;
+		ritem->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST; // D3D11 -> D3D12 표기로 수정
+		ritem->IndexCount = submeshGeo.IndexCount;
+		ritem->StartIndexLocation = submeshGeo.StartIndexLocation;
+		ritem->BaseVertexLocation = submeshGeo.BaseVertexLocation;
+
+		mAllRitems.push_back(std::move(ritem));
+	}
+
 	for (auto& e : mAllRitems)
 		mOpaqueRitems.push_back(e.get());
 }

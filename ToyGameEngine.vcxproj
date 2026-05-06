@@ -134,6 +134,7 @@
     <ClCompile Include="Common\GameTimer.cpp" />
     <ClCompile Include="Common\GeometryGenerator.cpp" />
     <ClCompile Include="Common\MathHelper.cpp" />
+    <ClCompile Include="Source\AssetManager.cpp" />
     <ClCompile Include="Source\FrameResource.cpp" />
     <ClCompile Include="Source\ToyEngineApp.cpp" />
   </ItemGroup>
@@ -147,6 +148,7 @@
     <ClInclude Include="Common\GeometryGenerator.h" />
     <ClInclude Include="Common\MathHelper.h" />
     <ClInclude Include="Common\UploadBuffer.h" />
+    <ClInclude Include="Source\AssetManager.h" />
     <ClInclude Include="Source\FrameResource.h" />
     <ClInclude Include="Source\RenderItem.h" />
     <ClInclude Include="Source\ToyEngineApp.h" />
