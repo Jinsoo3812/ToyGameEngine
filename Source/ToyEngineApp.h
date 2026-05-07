@@ -7,6 +7,7 @@
 #include "../Common/GeometryGenerator.h"
 #include "RenderItem.h"
 #include "FrameResource.h"
+#include "Texture.h"
 
 using Microsoft::WRL::ComPtr;
 using namespace DirectX;
@@ -26,6 +27,10 @@ public:
 	virtual bool Initialize() override;
 
 private:
+	/* Update Function */
+
+	// 카메라의 위치와 방향을 갱신합니다.
+	void UpdateCamera(const GameTimer& gt);
 	// 창 크기가 바뀔 때 마다 수행됩니다. 창 크기 변경에 영향을 받는 자원들의 작업을 수행해야 합니다.
 	virtual void OnResize()override;
 	// 매 프레임 호출됩니다. 시간의 흐름에 따른 갱신 작업을 수행해야 합니다.
@@ -33,25 +38,33 @@ private:
 	// 매 프레임 호출됩니다. BackBuffer를 그리고 교체하여 화면에 표시합니다.
 	virtual void Draw(const GameTimer& gt)override;
 
+
+	/* Keyboard & Mouse Input Function */
+
 	// 마우스가 프로그램 창 위에서 눌렸을 때 호출
 	virtual void OnMouseDown(WPARAM btnState, int x, int y)override;
 	// 마우스가 프로그램 창 위에서 떼졌을 때 호출
 	virtual void OnMouseUp(WPARAM btnState, int x, int y)override;
 	// 마우스가 프로그램 창 위에서 움직였을 때 호출.
 	virtual void OnMouseMove(WPARAM btnState, int x, int y)override;
-
 	// 키보드가 처음 눌릴 때 한 번 호출됩니다.
 	virtual void OnKeyboardDown(WPARAM btnState)override;
 	// 키보드의 상태를 매 프레임마다 체크하여 처리합니다.
 	void OnKeyboardInput(const GameTimer& gt);
-	// 카메라의 위치와 방향을 갱신합니다.
-	void UpdateCamera(const GameTimer& gt);
+	
 
-	// HLSL Shader Compile 및 InputLayout 작성
-	void BuildShadersAndInputLayout();
+	/* Initialize Function */
 
 	// Texture를 로드하여 mTextures에 저장
 	void LoadTextures();
+	// RootSignature를 생성합니다.
+	void BuildRootSignature();
+	// View를 종류 별로 저장하는 Descriptor Heap을 생성합니다.
+	void BuildDescriptorHeaps();
+	// HLSL Shader Compile 및 InputLayout 작성
+	void BuildShadersAndInputLayout();
+
+
 
 	// MeshGeometry를 생성하여 mGeometries에 저장
 	void BuildShapeGeometry();
@@ -59,11 +72,9 @@ private:
 	// Material을 생성하여 mMaterials에 저장
 	void BuildMaterials();
 
-	// View를 종류 별로 저장하는 Descriptor Heap을 생성합니다.
-	void BuildDescriptorHeaps();
+	
 
-	// RootSignature를 생성합니다.
-	void BuildRootSignature();
+	
 
 	// RenderItem을 생성 및 저장
 	void BuildRenderItems();
@@ -82,7 +93,6 @@ private:
 	// FrameResource를 생성합니다.
 	void BuildFrameResources();
 
-
 	std::array<const CD3DX12_STATIC_SAMPLER_DESC, 6> GetStaticSamplers();
 private:
 	// 셰이더가 사용하는 자원(상수 버퍼 등)과 셰이더의 연결을 정의하는 객체
@@ -92,7 +102,7 @@ private:
 	ComPtr<ID3D12DescriptorHeap> mCbvHeap = nullptr;
 
 	// Shader Resource View를 위한 Descriptor Heap
-	ComPtr<ID3D12DescriptorHeap> mSrvDescriptorHeap = nullptr;
+	ComPtr<ID3D12DescriptorHeap> mSRVHeap = nullptr;
 
 
 	// 화면에 그릴 object들의 MeshGeometries
@@ -134,6 +144,9 @@ private:
 	
 	POINT mLastMousePos; // 마우스의 윈도우 창 위에서의 픽셀 좌표
 
+	/* Initialize Member */
+	UINT mNumSRVDescriptors = 100; // SRV Heap에 생성할 SRV의 개수
+
 	/* Camera Member */
 	float mPitch = 0.0f; // x축을 기준으로 상하 회전
 	float mYaw = 0.0f; // y축을 기준으로 좌우 회전 (반시계방향)
@@ -147,6 +160,7 @@ private:
 	float mMouseOrbitalSensitivity = 0.25f;
 	float mMouseZoomSensitivity = 0.005f;
 	float mCameraMoveSpeed = 3.0f;
+	float mCameraNearZ = 0.01f;
 
 	/* Frame Resource */
 	std::vector<std::unique_ptr<FrameResource>> mFrameResources; // FrameResources Container

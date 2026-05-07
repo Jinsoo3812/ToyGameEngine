@@ -260,6 +260,7 @@ struct Material
 	DirectX::XMFLOAT4X4 MatTransform = MathHelper::Identity4x4();
 };
 
+/* Texture.cpp로 이관
 struct Texture
 {
 	// Unique material name for lookup.
@@ -270,6 +271,7 @@ struct Texture
 	Microsoft::WRL::ComPtr<ID3D12Resource> Resource = nullptr;
 	Microsoft::WRL::ComPtr<ID3D12Resource> UploadHeap = nullptr;
 };
+*/
 
 #ifndef ThrowIfFailed
 #define ThrowIfFailed(x)                                              \
