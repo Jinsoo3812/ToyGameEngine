@@ -8,6 +8,7 @@
 #include "RenderItem.h"
 #include "FrameResource.h"
 #include "Texture.h"
+#include "DescriptorAllocator.h"
 
 using Microsoft::WRL::ComPtr;
 using namespace DirectX;
@@ -65,16 +66,13 @@ private:
 	void BuildShadersAndInputLayout();
 	// Map의 MeshGeometry를 생성하여 mGeometries에 저장
 	void LoadMapGeometry();
+	
+	
+	
+	
 	// Material을 생성하여 mMaterials에 저장
 	void BuildMaterials();
 
-	
-
-	
-
-	
-
-	
 
 	// RenderItem을 생성 및 저장
 	void BuildRenderItems();
@@ -146,6 +144,7 @@ private:
 
 	/* Initialize Member */
 	UINT mNumSRVDescriptors = 100; // SRV Heap에 생성할 SRV의 개수
+	std::unique_ptr<DescriptorAllocator> mSrvAllocator = nullptr; // SRV에게 Heap을 할당해주는 Allocator (Thread-safe)
 
 	/* Camera Member */
 	float mPitch = 0.0f; // x축을 기준으로 상하 회전

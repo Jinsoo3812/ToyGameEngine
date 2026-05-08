@@ -291,18 +291,35 @@ void ToyEngineApp::UpdateCamera(const GameTimer& gt)
 void ToyEngineApp::LoadTextures()
 {
     // Texture 모여있는 대상 폴더 경로
-    std::wstring directory = L"C:\Graphic Programming\ToyGameEngine\Textures\San_Miguel\PNG";
+    std::wstring directory = LR"(C:\Graphic Programming\ToyGameEngine\Textures\San_Miguel\PNG)";
 
-    // 각 스레드가 작업을 마치고 반환할 CommandList들을 모아둘 컨테이너
-    std::vector<std::future<ComPtr<ID3D12CommandList>>> futures;
+    // Worker Thread의 완료 상태를 담을 Container
+    std::vector<std::future<bool>> threadFutures;
+
+    // Worker Thread 내부의 GPU Upload 명령의 완료 상태를 담을 Container
+    std::vector<std::future<void>> uploadFutures;
+	std::mutex uploadMutex; // uploadFutures에 대한 Thread-safe한 접근을 위한 Mutex
 
     for (const auto& entry : std::filesystem::directory_iterator(directory))
     {
         if (entry.path().extension() == L".png")
         {
             // Worker Thread를 하나 만들어서 Texture Loading 작업을 비동기로 맡긴다.
-            futures.push_back(std::async(std::launch::async, [this, path = entry.path()]() // 자신이 loading할 entry path를 capture (for Thread Safe)
+            threadFutures.push_back(std::async(std::launch::async,
+                [this, path = entry.path(), &uploadFutures, &uploadMutex]() // 자신이 loading할 entry path를 capture (for Thread Safe)
                 {
+                    // 스레드 안전한 COM 초기화 (RAII 패턴)
+                    struct ScopedCOMInitializer {
+                        bool isInitialized;
+                        ScopedCOMInitializer() {
+                            // 멀티스레드 환경용 COM 초기화
+                            HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+                            isInitialized = SUCCEEDED(hr);
+                        }
+                        ~ScopedCOMInitializer() {
+                            if (isInitialized) CoUninitialize();
+                        }
+                    } comInit; // 생성되는 순간 초기화, 이 람다가 끝날 때(소멸 시) 자동 해제
 
                     // Texture 객체 생성
                     auto tex = std::make_unique<Texture>();
@@ -313,7 +330,7 @@ void ToyEngineApp::LoadTextures()
                     DirectX::ResourceUploadBatch uploadBatch(md3dDevice.Get());
                     uploadBatch.Begin();
 
-                    // Texture 
+                    // Texture Resource 생성 및 UploadBuffer로의 upload 명령
                     ThrowIfFailed(DirectX::CreateWICTextureFromFile(
                         md3dDevice.Get(),
                         uploadBatch,
@@ -321,17 +338,23 @@ void ToyEngineApp::LoadTextures()
                         tex->Resource.ReleaseAndGetAddressOf()
                     ));
 
-                    // UploadBuffer로의 upload 종료 및 GPU에 복사 명령 제출
+                    // UploadBuffer로의 upload 종료 및 GPU에 복사 명령 제출 및 대기
                     auto uploadOperation = uploadBatch.End(mCommandQueue.Get());
-                    uploadOperation.wait();
 
-					// Descriptor Heap의 Index 발급 (Thread-safe)
-                    uint32_t allocatedIndex = mSrvAllocator->AllocateIndex();
-                    tex->SrvHeapIndex = allocatedIndex;
+					// uploadFutures에 uploadOperation의 완료 상태 저장 (Thread-safe by Mutex)
+                    {
+                        std::lock_guard<std::mutex> lock(uploadMutex);
+                        uploadFutures.push_back(std::move(uploadOperation));
+                    }
 
-					// Device를 이용해 SRV 생성 (Thread-safe)
-                    CD3DX12_CPU_DESCRIPTOR_HANDLE hDescriptor = mSrvAllocator->GetHandleAt(allocatedIndex);
-                    tex->BuildSRV(md3dDevice.Get(), hDescriptor);
+                    // Descriptor 할당 (Thread-safe)
+                    DescriptorHandle allocatedHandle = mSrvAllocator->Allocate();
+
+                    // Texture 객체에 필요한 정보 저장 (나중에 렌더링 시 필요할 수 있음)
+                    tex->SrvHeapIndex = allocatedHandle.Index;
+
+                    // CPU Handle을 이용해 SRV 생성
+                    tex->BuildSRV(md3dDevice.Get(), allocatedHandle.CPUHandle);
 
                     // mTextures map에 저장 (Thread-safe by Mutex)
                     {
@@ -349,9 +372,15 @@ void ToyEngineApp::LoadTextures()
     std::vector<ID3D12CommandList*> cmdListsToExecute;
 
     // 모든 Worker Thread의 작업 완료를 대기 (초기 맵 로딩이므로 Main Thread Block)
-    for (auto& f : futures)
+    for (auto& f : threadFutures)
     {
         f.get();
+    }
+
+    // 제출된 모든 GPU 업로드(VRAM 복사) 작업이 완전히 끝날 때까지 대기
+    for (auto& uf : uploadFutures)
+    {
+        uf.wait();
     }
 }
 
@@ -447,6 +476,13 @@ void ToyEngineApp::BuildDescriptorHeaps()
     srvHeapDesc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
     srvHeapDesc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
     ThrowIfFailed(md3dDevice->CreateDescriptorHeap(&srvHeapDesc, IID_PPV_ARGS(&mSRVHeap)));
+
+    // SRV DescriptorAllocator 생성
+    mSrvAllocator = std::make_unique<DescriptorAllocator>(
+        md3dDevice.Get(),
+        D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+        mNumSRVDescriptors
+    );
 }
 
 

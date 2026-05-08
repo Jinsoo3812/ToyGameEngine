@@ -135,6 +135,7 @@
     <ClCompile Include="Common\GeometryGenerator.cpp" />
     <ClCompile Include="Common\MathHelper.cpp" />
     <ClCompile Include="Source\AssetManager.cpp" />
+    <ClCompile Include="Source\DescriptorAllocator.cpp" />
     <ClCompile Include="Source\FrameResource.cpp" />
     <ClCompile Include="Source\Texture.cpp" />
     <ClCompile Include="Source\ToyEngineApp.cpp" />
@@ -150,6 +151,7 @@
     <ClInclude Include="Common\MathHelper.h" />
     <ClInclude Include="Common\UploadBuffer.h" />
     <ClInclude Include="Source\AssetManager.h" />
+    <ClInclude Include="Source\DescriptorAllocator.h" />
     <ClInclude Include="Source\FrameResource.h" />
     <ClInclude Include="Source\RenderItem.h" />
     <ClInclude Include="Source\Texture.h" />
