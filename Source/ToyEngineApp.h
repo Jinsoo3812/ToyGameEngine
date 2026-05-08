@@ -55,22 +55,22 @@ private:
 
 	/* Initialize Function */
 
-	// Texture를 로드하여 mTextures에 저장
-	void LoadTextures();
 	// RootSignature를 생성합니다.
 	void BuildRootSignature();
 	// View를 종류 별로 저장하는 Descriptor Heap을 생성합니다.
 	void BuildDescriptorHeaps();
+	// Texture를 로드하여 mTextures에 저장
+	void LoadTextures();
 	// HLSL Shader Compile 및 InputLayout 작성
 	void BuildShadersAndInputLayout();
-
-
-
-	// MeshGeometry를 생성하여 mGeometries에 저장
-	void BuildShapeGeometry();
-
+	// Map의 MeshGeometry를 생성하여 mGeometries에 저장
+	void LoadMapGeometry();
 	// Material을 생성하여 mMaterials에 저장
 	void BuildMaterials();
+
+	
+
+	
 
 	
 

@@ -136,6 +136,7 @@
     <ClCompile Include="Common\MathHelper.cpp" />
     <ClCompile Include="Source\AssetManager.cpp" />
     <ClCompile Include="Source\FrameResource.cpp" />
+    <ClCompile Include="Source\Texture.cpp" />
     <ClCompile Include="Source\ToyEngineApp.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -151,13 +152,24 @@
     <ClInclude Include="Source\AssetManager.h" />
     <ClInclude Include="Source\FrameResource.h" />
     <ClInclude Include="Source\RenderItem.h" />
+    <ClInclude Include="Source\Texture.h" />
     <ClInclude Include="Source\ToyEngineApp.h" />
     <ClInclude Include="Source\Utility\Log.h" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="ToyGameEngine.rc" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="packages.config" />
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
+    <Import Project="packages\directxtk12_desktop_win10.2026.4.1.1\build\native\directxtk12_desktop_win10.targets" Condition="Exists('packages\directxtk12_desktop_win10.2026.4.1.1\build\native\directxtk12_desktop_win10.targets')" />
   </ImportGroup>
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>이 프로젝트는 이 컴퓨터에 없는 NuGet 패키지를 참조합니다. 해당 패키지를 다운로드하려면 NuGet 패키지 복원을 사용하십시오. 자세한 내용은 http://go.microsoft.com/fwlink/?LinkID=322105를 참조하십시오. 누락된 파일은 {0}입니다.</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('packages\directxtk12_desktop_win10.2026.4.1.1\build\native\directxtk12_desktop_win10.targets')" Text="$([System.String]::Format('$(ErrorText)', 'packages\directxtk12_desktop_win10.2026.4.1.1\build\native\directxtk12_desktop_win10.targets'))" />
+  </Target>
 </Project>

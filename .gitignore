@@ -10,6 +10,7 @@
 *.userosscache
 *.sln.docstates
 *.toygeom
+*.png
 
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs

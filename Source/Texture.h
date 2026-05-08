@@ -20,4 +20,5 @@ public:
 
 	Microsoft::WRL::ComPtr<ID3D12Resource> Resource = nullptr; // VRAM의 Texture Resource
 	Microsoft::WRL::ComPtr<ID3D12Resource> UploadHeap = nullptr; // GPU가 Texture Resource로 데이터를 복사할 때 사용하는 Upload Heap
+	UINT SrvHeapIndex = -1; // SRV Heap에서 이 Texture의 SRV가 위치한 인덱스
 };
