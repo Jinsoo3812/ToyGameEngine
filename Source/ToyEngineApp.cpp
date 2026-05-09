@@ -308,18 +308,20 @@ void ToyEngineApp::LoadTextures()
             threadFutures.push_back(std::async(std::launch::async,
                 [this, path = entry.path(), &uploadFutures, &uploadMutex]() // 자신이 loading할 entry path를 capture (for Thread Safe)
                 {
-                    // 스레드 안전한 COM 초기화 (RAII 패턴)
+                    /* 
+                    * PNG 때문에 사용하는 CreateWICTextureFromFile를 위한 COM 초기화.
+					* DDS의 경우에는 CreateDDSTextureFromFile을 사용하므로 COM 초기화가 필요없으므로 나중에 지울 수 있음.
+                    */
                     struct ScopedCOMInitializer {
                         bool isInitialized;
                         ScopedCOMInitializer() {
-                            // 멀티스레드 환경용 COM 초기화
                             HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
                             isInitialized = SUCCEEDED(hr);
                         }
                         ~ScopedCOMInitializer() {
                             if (isInitialized) CoUninitialize();
                         }
-                    } comInit; // 생성되는 순간 초기화, 이 람다가 끝날 때(소멸 시) 자동 해제
+                    } comInit;
 
                     // Texture 객체 생성
                     auto tex = std::make_unique<Texture>();

@@ -143,7 +143,7 @@ private:
 	POINT mLastMousePos; // 마우스의 윈도우 창 위에서의 픽셀 좌표
 
 	/* Initialize Member */
-	UINT mNumSRVDescriptors = 100; // SRV Heap에 생성할 SRV의 개수
+	UINT mNumSRVDescriptors = 7777; // SRV Heap에 생성할 SRV의 개수
 	std::unique_ptr<DescriptorAllocator> mSrvAllocator = nullptr; // SRV에게 Heap을 할당해주는 Allocator (Thread-safe)
 
 	/* Camera Member */
