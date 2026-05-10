@@ -137,7 +137,6 @@
     <ClCompile Include="Source\AssetManager.cpp" />
     <ClCompile Include="Source\FrameResource.cpp" />
     <ClCompile Include="Source\Texture.cpp" />
-    <ClCompile Include="Source\ThreadPool.cpp" />
     <ClCompile Include="Source\ToyEngineApp.cpp" />
   </ItemGroup>
   <ItemGroup>

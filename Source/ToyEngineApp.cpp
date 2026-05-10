@@ -7,6 +7,8 @@
 #include <mutex>
 #include <future>
 #include "ResourceUploadBatch.h"
+#include <fstream>
+#include <sstream>
 
 std::mutex mTextureMapMutex;
 
@@ -53,7 +55,13 @@ bool ToyEngineApp::Initialize()
     // CommandList를 Open하여 명령 입력을 준비
     ThrowIfFailed(mCommandList->Reset(mDirectCmdListAlloc.Get(), nullptr));
 
+    // CBV/SRV Descriptor 하나의 크기를 캐시
     mCbvSrvDescriptorSize = md3dDevice->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+
+	// ThreadPool을 생성하여 멀티 스레딩을 활용할 준비
+    unsigned int numThreads = std::thread::hardware_concurrency(); // OS를 통해 HW가 지원하는 최대 thread 수를 획득
+    mThreadPool = std::make_unique<ThreadPool>(numThreads > 1 ? numThreads - 1 : 1); // Main Thread를 위해 -1
+	OutputDebugString((L"ThreadPool created with " + std::to_wstring(numThreads) + L" threads.\n").c_str());
 
     BuildRootSignature();
     BuildDescriptorHeaps();
@@ -293,11 +301,8 @@ void ToyEngineApp::LoadTextures()
     // Texture 모여있는 대상 폴더 경로
     std::wstring directory = LR"(C:\Graphic Programming\ToyGameEngine\Textures\San_Miguel\PNG)";
 
-    // Worker Thread의 완료 상태를 담을 Container
-    std::vector<std::future<bool>> threadFutures;
-
-    // Worker Thread 내부의 GPU Upload 명령의 완료 상태를 담을 Container
-    std::vector<std::future<void>> uploadFutures;
+    std::vector<std::future<bool>> threadFutures; // Worker Thread의 완료 상태를 담을 Container
+    std::vector<std::future<void>> uploadFutures; // Worker Thread 내부의 GPU Upload 명령의 완료 상태를 담을 Container
 	std::mutex uploadMutex; // uploadFutures에 대한 Thread-safe한 접근을 위한 Mutex
 
     for (const auto& entry : std::filesystem::directory_iterator(directory))
@@ -305,24 +310,9 @@ void ToyEngineApp::LoadTextures()
         if (entry.path().extension() == L".png")
         {
             // Worker Thread를 하나 만들어서 Texture Loading 작업을 비동기로 맡긴다.
-            threadFutures.push_back(std::async(std::launch::async,
-                [this, path = entry.path(), &uploadFutures, &uploadMutex]() // 자신이 loading할 entry path를 capture (for Thread Safe)
+            threadFutures.push_back(mThreadPool->Enqueue(
+                [this, path = entry.path(), &uploadFutures, &uploadMutex]()
                 {
-                    /* 
-                    * PNG 때문에 사용하는 CreateWICTextureFromFile를 위한 COM 초기화.
-					* DDS의 경우에는 CreateDDSTextureFromFile을 사용하므로 COM 초기화가 필요없으므로 나중에 지울 수 있음.
-                    */
-                    struct ScopedCOMInitializer {
-                        bool isInitialized;
-                        ScopedCOMInitializer() {
-                            HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-                            isInitialized = SUCCEEDED(hr);
-                        }
-                        ~ScopedCOMInitializer() {
-                            if (isInitialized) CoUninitialize();
-                        }
-                    } comInit;
-
                     // Texture 객체 생성
                     auto tex = std::make_unique<Texture>();
                     tex->Name = path.stem().string();
@@ -374,16 +364,10 @@ void ToyEngineApp::LoadTextures()
     std::vector<ID3D12CommandList*> cmdListsToExecute;
 
     // 모든 Worker Thread의 작업 완료를 대기 (초기 맵 로딩이므로 Main Thread Block)
-    for (auto& f : threadFutures)
-    {
-        f.get();
-    }
+    for (auto& f : threadFutures){ f.get(); }
 
     // 제출된 모든 GPU 업로드(VRAM 복사) 작업이 완전히 끝날 때까지 대기
-    for (auto& uf : uploadFutures)
-    {
-        uf.wait();
-    }
+    for (auto& uf : uploadFutures) { uf.wait(); }
 }
 
 void ToyEngineApp::BuildRootSignature()
@@ -449,6 +433,7 @@ void ToyEngineApp::LoadMapGeometry()
 {
     // Geometry의 외부 바이너리 파일 로드
     std::string filePath = R"(C:\Graphic Programming\ToyGameEngine\Asset\san-miguel-low-poly.toygeom)";
+    LR"(C:\Graphic Programming\ToyGameEngine\Textures\San_Miguel\PNG)";
     auto geo = AssetManager::LoadBinaryModel("SanMiguelGeo", filePath, md3dDevice.Get(), mCommandList.Get());
 
     if (geo != nullptr)
@@ -459,15 +444,73 @@ void ToyEngineApp::LoadMapGeometry()
 
 void ToyEngineApp::BuildMaterials()
 {
-    auto woodCrate = std::make_unique<Material>();
-    woodCrate->Name = "woodCrate";
-    woodCrate->MatCBIndex = 0;
-    woodCrate->DiffuseSrvHeapIndex = 0;
-    woodCrate->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
-    woodCrate->FresnelR0 = XMFLOAT3(0.05f, 0.05f, 0.05f);
-    woodCrate->Roughness = 0.2f;
+    // 1. mtl 파일 열기
+    std::ifstream fin("C:\\Graphic Programming\\ToyGameEngine\\Asset\\san-miguel.mtl");
+    if (!fin.is_open())
+    {
+        LOG_WARNING(L"MTL 파일을 열 수 없습니다.");
+        return;
+    }
 
-    mMaterials["woodCrate"] = std::move(woodCrate);
+    std::string line;
+    Material* currentMat = nullptr;
+    UINT matCBIndex = 0;
+
+    // 2. 한 줄씩 파싱
+    while (std::getline(fin, line))
+    {
+        std::istringstream iss(line);
+        std::string prefix;
+        iss >> prefix;
+
+        if (prefix == "newmtl")
+        {
+            std::string matName;
+            iss >> matName;
+
+            auto mat = std::make_unique<Material>();
+            mat->Name = matName;
+            mat->MatCBIndex = matCBIndex++;
+
+            // 기본값 (PBR 렌더러 기준 적당한 초기값)
+            mat->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
+            mat->FresnelR0 = XMFLOAT3(0.05f, 0.05f, 0.05f);
+            mat->Roughness = 0.5f;
+            mat->DiffuseSrvHeapIndex = 0; // 기본 텍스처 인덱스 (에러 방지용)
+
+            currentMat = mat.get();
+            mMaterials[matName] = std::move(mat);
+        }
+        else if (prefix == "Kd" && currentMat)
+        {
+            iss >> currentMat->DiffuseAlbedo.x >> currentMat->DiffuseAlbedo.y >> currentMat->DiffuseAlbedo.z;
+        }
+        else if (prefix == "map_Kd" && currentMat)
+        {
+            std::string texFilename;
+            iss >> texFilename;
+
+            // 확장자(.png)를 떼어내고 이름만 추출하여 키값으로 사용 (예: "leaf_diff.png" -> "leaf_diff")
+            std::filesystem::path texPath(texFilename);
+            std::string texName = texPath.stem().string();
+
+            // LoadTextures()에서 미리 로드해둔 mTextures 맵에서 검색
+            std::lock_guard<std::mutex> lock(mTextureMapMutex); // 스레드 안전성 확인
+            if (mTextures.find(texName) != mTextures.end())
+            {
+                // 찾았다면 해당 텍스처의 SRV 인덱스를 머티리얼에 바인딩!
+                currentMat->DiffuseSrvHeapIndex = mTextures[texName]->SrvHeapIndex;
+            }
+            else
+            {
+                // 텍스처 로드가 누락되었거나 이름이 불일치하는 경우
+                std::stringstream ss;
+                ss << "Warning: Texture not found for material " << currentMat->Name << " : " << texName << "\n";
+                OutputDebugStringA(ss.str().c_str());
+            }
+        }
+        // 기타 속성(Ks, Ns, map_bump 등)도 필요에 따라 파싱...
+    }
 }
 
 void ToyEngineApp::BuildDescriptorHeaps()

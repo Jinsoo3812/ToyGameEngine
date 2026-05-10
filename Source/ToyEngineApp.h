@@ -9,6 +9,7 @@
 #include "FrameResource.h"
 #include "Texture.h"
 #include "DescriptorAllocator.h"
+#include "ThreadPool.h"
 
 using Microsoft::WRL::ComPtr;
 using namespace DirectX;
@@ -166,4 +167,7 @@ private:
 	FrameResource* mCurrFrameResource = nullptr; // 현재 CPU가 작업 중인 FrameResource
 	int mCurrFrameResourceIndex = 0; // CPU가 작업 중인 FrameResource의 index
 	UINT mCbvSrvDescriptorSize = 0;
+
+	/* Multi Thread Member */
+	std::unique_ptr<ThreadPool> mThreadPool = nullptr; // ThreadPool 객체
 };
