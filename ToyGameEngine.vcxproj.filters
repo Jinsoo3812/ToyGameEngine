@@ -49,9 +49,7 @@
     <ClCompile Include="Source\Texture.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
-    <ClCompile Include="Source\DescriptorAllocator.cpp">
-      <Filter>소스 파일</Filter>
-    </ClCompile>
+    <ClCompile Include="Source\ThreadPool.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Common\Camera.h">
@@ -100,6 +98,9 @@
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="Source\DescriptorAllocator.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="Source\ThreadPool.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
   </ItemGroup>
